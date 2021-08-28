@@ -226,8 +226,9 @@ android {
 
   if (useAndroidX) {
     dependencies {
-      implementation 'com.google.android.libraries.maps:maps:3.1.0-beta'
+      implementation 'com.google.android.libraries.maps:maps:3.0.0-beta'
       implementation 'com.android.support:multidex:1.0.3'
+      implementation 'com.google.maps.android:android-maps-utils-v3:1.3.1'
     }
 
     defaultConfig {
