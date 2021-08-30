@@ -251,7 +251,7 @@ android {
   //-----------------------------------------------
   def cvtList = getConvertListe(useAndroidX)
 
-  //replaceFiles("**/plugin/google/maps/*.java", cvtList, useAndroidX)
+  replaceFiles("**/plugin/google/maps/*.java", cvtList, useAndroidX)
 
   //-------------------------------------------
   // Set the API key into AndroidManifest.xml
