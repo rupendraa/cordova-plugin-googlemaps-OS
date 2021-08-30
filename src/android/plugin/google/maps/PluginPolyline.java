@@ -1,64 +1,53 @@
 package plugin.google.maps;
 
-import com.google.android.libraries.maps.GoogleMap;
-import com.google.android.libraries.maps.model.LatLng;
-import com.google.android.libraries.maps.model.LatLngBounds;
-import com.google.android.libraries.maps.model.Polyline;
-import com.google.android.libraries.maps.model.PolylineOptions;
+import android.graphics.Color;
+import android.util.Log;
+
+import com.google.android.gms.maps.model.CircleOptions;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
+import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
 
 import org.apache.cordova.CallbackContext;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 
-public class PluginPolyline extends MyPlugin implements IOverlayPlugin {
-
-  private PluginMap pluginMap;
-  public final ConcurrentHashMap<String, MetaPolyline> objects = new ConcurrentHashMap<String, MetaPolyline>();
-
-  public PluginMap getMapInstance(String mapId) {
-    return (PluginMap) CordovaGoogleMaps.viewPlugins.get(mapId);
-  }
-  public PluginPolyline getInstance(String mapId) {
-    PluginMap mapInstance = getMapInstance(mapId);
-    return (PluginPolyline) mapInstance.plugins.get(String.format("%s-polyline", mapId));
-  }
-  @Override
-  public void setPluginMap(PluginMap pluginMap) {
-    this.pluginMap = pluginMap;
-  }
-
+public class PluginPolyline extends MyPlugin implements MyPluginInterface  {
+  private String polylineHashCode;
 
   /**
    * Create polyline
+   * @param args
+   * @param callbackContext
+   * @throws JSONException
    */
   public void create(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
+    self = this;
 
     final PolylineOptions polylineOptions = new PolylineOptions();
     int color;
     final LatLngBounds.Builder builder = new LatLngBounds.Builder();
     final JSONObject properties = new JSONObject();
 
-    JSONObject opts = args.getJSONObject(2);
-    final String hashCode = args.getString(3);
+    JSONObject opts = args.getJSONObject(1);
+    final String hashCode = args.getString(2);
+    polylineHashCode = hashCode;
 
-    final String polylineId = "polyline_" + hashCode;
-    final MetaPolyline meta = new MetaPolyline(polylineId);
-
-    int pointCnt = 0;
     if (opts.has("points")) {
       JSONArray points = opts.getJSONArray("points");
       List<LatLng> path = PluginUtil.JSONArray2LatLngList(points);
-      for (int i = 0; i < path.size(); i++) {
+      int i = 0;
+      for (i = 0; i < path.size(); i++) {
         polylineOptions.add(path.get(i));
         builder.include(path.get(i));
       }
-      pointCnt = path.size();
     }
-    final int finalPointCnt = pointCnt;
     if (opts.has("color")) {
       color = PluginUtil.parsePluginColor(opts.getJSONArray("color"));
       polylineOptions.color(color);
@@ -67,8 +56,7 @@ public class PluginPolyline extends MyPlugin implements IOverlayPlugin {
       polylineOptions.width((float)(opts.getDouble("width") * density));
     }
     if (opts.has("visible")) {
-      meta.isVisible = opts.getBoolean("visible");
-      polylineOptions.visible(meta.isVisible);
+      polylineOptions.visible(opts.getBoolean("visible"));
     }
     if (opts.has("geodesic")) {
       polylineOptions.geodesic(opts.getBoolean("geodesic"));
@@ -77,248 +65,270 @@ public class PluginPolyline extends MyPlugin implements IOverlayPlugin {
       polylineOptions.zIndex(opts.getInt("zIndex"));
     }
     if (opts.has("clickable")) {
-      meta.isClickable = opts.getBoolean("clickable");
-      properties.put("isClickable", meta.isClickable);
+      properties.put("isClickable", opts.getBoolean("clickable"));
     } else {
-      meta.isClickable = true;
       properties.put("isClickable", true);
     }
-    properties.put("isVisible", meta.isVisible);
+    properties.put("isVisible", polylineOptions.isVisible());
 
     // Since this plugin provide own click detection,
     // disable default clickable feature.
     polylineOptions.clickable(false);
 
-    meta.properties = properties;
-    objects.put(polylineId, meta);
-
-    activity.runOnUiThread(new Runnable() {
+    cordova.getActivity().runOnUiThread(new Runnable() {
       @Override
       public void run() {
 
-        Polyline polyline = pluginMap.getGoogleMap().addPolyline(polylineOptions);
-        polyline.setTag(polylineId);
-        meta.polyline = polyline;
+        Polyline polyline = map.addPolyline(polylineOptions);
+        polyline.setTag(hashCode);
+        String id = "polyline_" + hashCode;
+        pluginMap.objects.put(id, polyline);
 
-        if (finalPointCnt > 0) {
-          meta.bounds = builder.build();
-        } else {
-          meta.bounds = new LatLngBounds(new LatLng(360, 360), new LatLng(360, 360));
+        String boundsId = "polyline_bounds_" + hashCode;
+        pluginMap.objects.put(boundsId, builder.build());
+
+        String propertyId = "polyline_property_" + hashCode;
+        pluginMap.objects.put(propertyId, properties);
+
+        try {
+          JSONObject result = new JSONObject();
+          result.put("hashCode", hashCode);
+          result.put("__pgmId", id);
+          callbackContext.success(result);
+        } catch (JSONException e) {
+          e.printStackTrace();
+          callbackContext.error("" + e.getMessage());
         }
       }
+
     });
-
-    try {
-      JSONObject result = new JSONObject();
-      result.put("hashCode", hashCode);
-      result.put("__pgmId", polylineId);
-      callbackContext.success(result);
-    } catch (JSONException e) {
-      e.printStackTrace();
-      callbackContext.error("" + e.getMessage());
-    }
   }
 
-
-  @Override
-  public void onDestroy() {
-    super.onDestroy();
-    objects.clear();
-  }
 
   /**
    * set color
+   * @param args
+   * @param callbackContext
+   * @throws JSONException
    */
-  @PgmPluginMethod(runOnUiThread = true)
   public void setStrokeColor(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
-    String mapId = args.getString(0);
-    String polygonId = args.getString(1);
-    PluginPolyline instance = getInstance(mapId);
-    MetaPolyline meta = instance.objects.get(polygonId);
-
-    int color = PluginUtil.parsePluginColor(args.getJSONArray(2));
-    meta.polyline.setColor(color);;
-    callbackContext.success();
+    String id = args.getString(0);
+    int color = PluginUtil.parsePluginColor(args.getJSONArray(1));
+    this.setInt("setColor", id, color, callbackContext);
   }
 
   /**
    * set width
+   * @param args
+   * @param callbackContext
+   * @throws JSONException
    */
-  @PgmPluginMethod(runOnUiThread = true)
   public void setStrokeWidth(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
-    String mapId = args.getString(0);
-    String polygonId = args.getString(1);
-    PluginPolyline instance = getInstance(mapId);
-    MetaPolyline meta = instance.objects.get(polygonId);
-
-    float width = (float)(args.getDouble(2) * density);
-    meta.polyline.setWidth(width);
-    callbackContext.success();
+    String id = args.getString(0);
+    float width = (float)(args.getDouble(1) * density);
+    this.setFloat("setWidth", id, width, callbackContext);
   }
 
   /**
    * set z-index
+   * @param args
+   * @param callbackContext
+   * @throws JSONException
    */
-  @PgmPluginMethod(runOnUiThread = true)
   public void setZIndex(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
-    String mapId = args.getString(0);
-    String polygonId = args.getString(1);
-    PluginPolyline instance = getInstance(mapId);
-    MetaPolyline meta = instance.objects.get(polygonId);
-
-    float zIndex = (float) args.getDouble(2);
-    meta.polyline.setZIndex(zIndex);
-    callbackContext.success();
+    String id = args.getString(0);
+    float zIndex = (float) args.getDouble(1);
+    this.setFloat("setZIndex", id, zIndex, callbackContext);
   }
 
 
   /**
    * Remove the polyline
+   * @param args
+   * @param callbackContext
+   * @throws JSONException
    */
-  @PgmPluginMethod(runOnUiThread = true)
   public void remove(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
-    String mapId = args.getString(0);
-    String polygonId = args.getString(1);
-    PluginPolyline instance = getInstance(mapId);
-
-    MetaPolyline meta = instance.objects.remove(polygonId);
-    meta.polyline.remove();
-    callbackContext.success();
-  }
-
-  @PgmPluginMethod(runOnUiThread = true)
-  public void setPoints(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
-    String mapId = args.getString(0);
-    String polygonId = args.getString(1);
-    PluginPolyline instance = getInstance(mapId);
-    MetaPolyline meta = instance.objects.get(polygonId);
-
-    JSONArray positionList = args.getJSONArray(2);
-
-    List<LatLng> path = meta.polyline.getPoints();
-    path.clear();
-    JSONObject position;
-    for (int i = 0; i < positionList.length(); i++) {
-      position = positionList.getJSONObject(i);
-      path.add(new LatLng(position.getDouble("lat"), position.getDouble("lng")));
+    String id = args.getString(0);
+    final Polyline polyline = this.getPolyline(id);
+    if (polyline == null) {
+      callbackContext.success();
+      return;
     }
-    meta.polyline.setPoints(path);
-    meta.bounds = PluginUtil.getBoundsFromPath(path);
-    callbackContext.success();
-  }
+    pluginMap.objects.remove(id);
 
-  @PgmPluginMethod(runOnUiThread = true)
-  public void removePointAt(final JSONArray args, CallbackContext callbackContext) throws JSONException {
-    String mapId = args.getString(0);
-    String polygonId = args.getString(1);
-    PluginPolyline instance = getInstance(mapId);
-    MetaPolyline meta = instance.objects.get(polygonId);
+    id = "polyline_bounds_" + polylineHashCode;
+    pluginMap.objects.remove(id);
 
-    int index = args.getInt(2);
-
-    List<LatLng> path = meta.polyline.getPoints();
-    if (path.size() > index) {
-      path.remove(index);
-      if (path.size() > 0) {
-        meta.bounds = PluginUtil.getBoundsFromPath(path);
-      } else {
-        meta.bounds = new LatLngBounds(new LatLng(360, 360), new LatLng(360, 360));
+    cordova.getActivity().runOnUiThread(new Runnable() {
+      @Override
+      public void run() {
+        polyline.remove();
+        callbackContext.success();
       }
+    });
+  }
+  public void setPoints(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
 
-      meta.polyline.setPoints(path);
-    }
+    String id = args.getString(0);
+    final JSONArray positionList = args.getJSONArray(1);
+
+    final Polyline polyline = this.getPolyline(id);
+    // Recalculate the polygon bounds
+    final String propertyId = "polyline_bounds_" + polylineHashCode;
+
+    cordova.getActivity().runOnUiThread(new Runnable() {
+      @Override
+      public void run() {
+
+        try {
+          List<LatLng> path = polyline.getPoints();
+          path.clear();
+          JSONObject position;
+          for (int i = 0; i < positionList.length(); i++) {
+            position = positionList.getJSONObject(i);
+            path.add(new LatLng(position.getDouble("lat"), position.getDouble("lng")));
+          }
+          polyline.setPoints(path);
+          pluginMap.objects.put(propertyId, PluginUtil.getBoundsFromPath(path));
+        } catch (JSONException e) {
+          e.printStackTrace();
+        }
+        callbackContext.success();
+      }
+    });
+  }
+  public void removePointAt(final JSONArray args, CallbackContext callbackContext) throws JSONException {
+
+    String id = args.getString(0);
+    final int index = args.getInt(1);
+    final Polyline polyline = this.getPolyline(id);
+
+    // Recalculate the polygon bounds
+    final String propertyId = "polyline_bounds_" + polylineHashCode;
+
+    cordova.getActivity().runOnUiThread(new Runnable() {
+      @Override
+      public void run() {
+        List<LatLng> path = polyline.getPoints();
+        if (path.size() > index) {
+          path.remove(index);
+          if (path.size() > 0) {
+            pluginMap.objects.put(propertyId, PluginUtil.getBoundsFromPath(path));
+          } else {
+            pluginMap.objects.remove(propertyId);
+          }
+
+          polyline.setPoints(path);
+        }
+      }
+    });
     callbackContext.success();
   }
-
-  @PgmPluginMethod(runOnUiThread = true)
   public void insertPointAt(final JSONArray args, CallbackContext callbackContext) throws JSONException {
-    String mapId = args.getString(0);
-    String polygonId = args.getString(1);
-    PluginPolyline instance = getInstance(mapId);
-    MetaPolyline meta = instance.objects.get(polygonId);
 
-    int index = args.getInt(2);
-    JSONObject position = args.getJSONObject(3);
+    String id = args.getString(0);
+    final int index = args.getInt(1);
+    JSONObject position = args.getJSONObject(2);
     final LatLng latLng = new LatLng(position.getDouble("lat"), position.getDouble("lng"));
 
-    List<LatLng> path = meta.polyline.getPoints();
-    if (path.size() >= index) {
-      path.add(index, latLng);
-      meta.polyline.setPoints(path);
-      meta.bounds = PluginUtil.getBoundsFromPath(path);
-    }
+    final Polyline polyline = this.getPolyline(id);
+
+
+    // Recalculate the polygon bounds
+    final String propertyId = "polyline_bounds_" + polylineHashCode;
+
+    cordova.getActivity().runOnUiThread(new Runnable() {
+      @Override
+      public void run() {
+        List<LatLng> path = polyline.getPoints();
+        if (path.size() >= index) {
+          path.add(index, latLng);
+          polyline.setPoints(path);
+          pluginMap.objects.put(propertyId, PluginUtil.getBoundsFromPath(path));
+        }
+      }
+    });
     callbackContext.success();
   }
-
-  @PgmPluginMethod(runOnUiThread = true)
   public void setPointAt(final JSONArray args, CallbackContext callbackContext) throws JSONException {
-    String mapId = args.getString(0);
-    String polygonId = args.getString(1);
-    PluginPolyline instance = getInstance(mapId);
-    MetaPolyline meta = instance.objects.get(polygonId);
 
-    final int index = args.getInt(2);
-    JSONObject position = args.getJSONObject(3);
+    String id = args.getString(0);
+    final int index = args.getInt(1);
+    JSONObject position = args.getJSONObject(2);
     final LatLng latLng = new LatLng(position.getDouble("lat"), position.getDouble("lng"));
 
 
-    List<LatLng> path = meta.polyline.getPoints();
-    if (path.size() > index) {
-      path.set(index, latLng);
+    final Polyline polyline = this.getPolyline(id);
 
-      // Recalculate the polygon bounds
-      meta.bounds = PluginUtil.getBoundsFromPath(path);
+    cordova.getActivity().runOnUiThread(new Runnable() {
+      @Override
+      public void run() {
+        List<LatLng> path = polyline.getPoints();
+        if (path.size() > index) {
+          path.set(index, latLng);
 
-      meta.polyline.setPoints(path);
-    }
+          // Recalculate the polygon bounds
+          String propertyId = "polyline_bounds_" + polylineHashCode;
+          pluginMap.objects.put(propertyId, PluginUtil.getBoundsFromPath(path));
+
+          polyline.setPoints(path);
+        }
+      }
+    });
     callbackContext.success();
   }
 
   /**
    * set geodesic
+   * @param args
+   * @param callbackContext
+   * @throws JSONException
    */
-  @PgmPluginMethod(runOnUiThread = true)
   public void setGeodesic(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
-    String mapId = args.getString(0);
-    String polygonId = args.getString(1);
-    PluginPolyline instance = getInstance(mapId);
-    MetaPolyline meta = instance.objects.get(polygonId);
-
-    boolean isGeodisic = args.getBoolean(2);
-    meta.polyline.setGeodesic(isGeodisic);
-    callbackContext.success();
+    String id = args.getString(0);
+    boolean isGeodisic = args.getBoolean(1);
+    this.setBoolean("setGeodesic", id, isGeodisic, callbackContext);
   }
 
   /**
    * Set visibility for the object
+   * @param args
+   * @param callbackContext
+   * @throws JSONException
    */
-  @PgmPluginMethod(runOnUiThread = true)
   public void setVisible(JSONArray args, CallbackContext callbackContext) throws JSONException {
-    String mapId = args.getString(0);
-    String polygonId = args.getString(1);
-    PluginPolyline instance = getInstance(mapId);
-    MetaPolyline meta = instance.objects.get(polygonId);
+    String id = args.getString(0);
+    final boolean isVisible = args.getBoolean(1);
 
-    boolean isVisible = args.getBoolean(2);
-    meta.polyline.setVisible(isVisible);
-    meta.isVisible = isVisible;
-    meta.properties.put("isVisible", isVisible);
+    final Polyline polyline = this.getPolyline(id);
+
+    cordova.getActivity().runOnUiThread(new Runnable() {
+      @Override
+      public void run() {
+        polyline.setVisible(isVisible);
+      }
+    });
+    String propertyId = "polyline_property_" + polylineHashCode;
+    JSONObject properties = (JSONObject)pluginMap.objects.get(propertyId);
+    properties.put("isVisible", isVisible);
+    pluginMap.objects.put(propertyId, properties);
     callbackContext.success();
   }
 
   /**
    * Set clickable for the object
+   * @param args
+   * @param callbackContext
+   * @throws JSONException
    */
-  @PgmPluginMethod
   public void setClickable(JSONArray args, CallbackContext callbackContext) throws JSONException {
-    String mapId = args.getString(0);
-    String polygonId = args.getString(1);
-    PluginPolyline instance = getInstance(mapId);
-    MetaPolyline meta = instance.objects.get(polygonId);
-
-    boolean clickable = args.getBoolean(2);
-    meta.isClickable = clickable;
-    meta.properties.put("isClickable", clickable);
+    String id = args.getString(0);
+    final boolean clickable = args.getBoolean(1);
+    String propertyId = id.replace("polyline_", "polyline_property_");
+    JSONObject properties = (JSONObject)pluginMap.objects.get(propertyId);
+    properties.put("isClickable", clickable);
+    pluginMap.objects.put(propertyId, properties);
     callbackContext.success();
   }
 }

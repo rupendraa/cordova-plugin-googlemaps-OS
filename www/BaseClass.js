@@ -1,4 +1,3 @@
-
 var VARS_FIELD = typeof Symbol === 'undefined' ? '__vars' + Date.now() : Symbol('vars');
 var SUBSCRIPTIONS_FIELD = typeof Symbol === 'undefined' ? '__subs' + Date.now() : Symbol('subscriptions');
 
@@ -137,41 +136,20 @@ BaseClass.prototype = {
   },
 
   off: function (eventName, listener) {
-    var self = this;
     if (!eventName && !listener) {
-      var eventNames = Object.keys(self[SUBSCRIPTIONS_FIELD]);
-      eventNames.forEach(function(evtName) {
-        var keys = Object.keys(self[SUBSCRIPTIONS_FIELD][evtName]);
-        keys.forEach(function(_hashCode) {
-          var info = self[SUBSCRIPTIONS_FIELD][evtName][_hashCode];
-          if (!info.listener._protect) {
-            delete self[SUBSCRIPTIONS_FIELD][evtName][_hashCode];
-          }
-        });
-      });
-      return self;
+      this[SUBSCRIPTIONS_FIELD] = {};
+      return this;
     }
 
     if (eventName && !listener) {
-      var keys = Object.keys(self[SUBSCRIPTIONS_FIELD][eventName]);
-      keys.forEach(function(_hashCode) {
-        var info = self[SUBSCRIPTIONS_FIELD][eventName][_hashCode];
-        if (!info.listener._protect) {
-          delete self[SUBSCRIPTIONS_FIELD][eventName][_hashCode];
-        }
-      });
-      if (self[SUBSCRIPTIONS_FIELD][eventName].length === 0) {
-        delete self[SUBSCRIPTIONS_FIELD][eventName];
-      }
-    } else if (self[SUBSCRIPTIONS_FIELD][eventName] && listener._hashCode) {
-      if (!self[SUBSCRIPTIONS_FIELD][eventName][listener._hashCode].listener._protect) {
-        delete self[SUBSCRIPTIONS_FIELD][eventName][listener._hashCode];
-      }
+      this[SUBSCRIPTIONS_FIELD][eventName] = null;
+      delete this[SUBSCRIPTIONS_FIELD][eventName];
+    } else if (this[SUBSCRIPTIONS_FIELD][eventName] && listener._hashCode) {
+      delete this[SUBSCRIPTIONS_FIELD][eventName][listener._hashCode];
     }
 
-    return self;
+    return this;
   },
-
 
   one: function (eventName, listener) {
     if (!listener || typeof listener !== 'function') {

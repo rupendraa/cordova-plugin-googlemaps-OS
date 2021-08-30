@@ -16,8 +16,8 @@ import android.text.StaticLayout;
 import android.text.TextPaint;
 import android.util.Log;
 
-import com.google.android.libraries.maps.model.Tile;
-import com.google.android.libraries.maps.model.TileProvider;
+import com.google.android.gms.maps.model.Tile;
+import com.google.android.gms.maps.model.TileProvider;
 
 import org.apache.cordova.CordovaWebView;
 
@@ -27,7 +27,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -53,7 +52,6 @@ public class PluginTileProvider implements TileProvider  {
   private Bitmap emptyBitmap = null;
   private final HashSet<String> cacheKeys = new HashSet<String>();
   private boolean isRemoved = false;
-  private String wwwDirName = "www";
 
   @SuppressLint({"NewApi", "JavascriptInterface"})
   public PluginTileProvider(String mapId, String pluginId, CordovaWebView webView, AssetManager assetManager, String webPageUrl, String userAgent, int tileSize, boolean isDebug) {
@@ -75,16 +73,6 @@ public class PluginTileProvider implements TileProvider  {
     int cacheSize = maxMemory / 8;
 
     tileCache = new BitmapCache(cacheSize);
-
-    try {
-      if (Arrays.asList(assetManager.list("")).contains("capacitor.config.json")) {
-        // Capacitor
-        this.wwwDirName = "public";
-      }
-    } catch (Exception e) {
-      // ignore
-    }
-
 
     this.isDebug = isDebug;
     if (isDebug) {
@@ -199,10 +187,10 @@ public class PluginTileProvider implements TileProvider  {
     if (urlStr.startsWith("http://localhost") ||
         urlStr.startsWith("http://127.0.0.1")) {
       if (urlStr.contains("://")) {
-        urlStr = urlStr.replaceAll("http://.+?/", "file:///android_asset/" + this.wwwDirName + "/");
+        urlStr = urlStr.replaceAll("http://.+?/", "file:///android_asset/www/");
       } else {
         // Avoid WebViewLocalServer (because can not make a connection for some reason)
-        urlStr = "file:///android_asset/" + this.wwwDirName + "/" + urlStr;
+        urlStr = "file:///android_asset/www/".concat(urlStr);
       }
     }
 

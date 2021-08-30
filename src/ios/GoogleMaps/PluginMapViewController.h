@@ -6,6 +6,7 @@
 //
 //
 
+#import <Cordova/CDV.h>
 #import <UIKit/UIKit.h>
 #import <math.h>
 #import "PluginUtil.h"

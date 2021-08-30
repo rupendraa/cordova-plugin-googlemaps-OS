@@ -60,26 +60,6 @@
 @end
 
 @implementation NSString (GoogleMapsPlugin)
-- (NSString *)urlencode {
-    NSMutableString *output = [NSMutableString string];
-    const unsigned char *source = (const unsigned char *)[self UTF8String];
-    int sourceLen = (int)strlen((const char *)source);
-    for (int i = 0; i < sourceLen; ++i) {
-        const unsigned char thisChar = source[i];
-        if (thisChar == ' '){
-            [output appendString:@"+"];
-        } else if (thisChar == '.' || thisChar == '-' || thisChar == '_' || thisChar == '~' ||
-                   (thisChar >= 'a' && thisChar <= 'z') ||
-                   (thisChar >= 'A' && thisChar <= 'Z') ||
-                   (thisChar >= '0' && thisChar <= '9')) {
-            [output appendFormat:@"%c", thisChar];
-        } else {
-            [output appendFormat:@"%%%02X", thisChar];
-        }
-    }
-    return output;
-}
-
 - (NSString*)regReplace:(NSString*)pattern replaceTxt:(NSString*)replaceTxt options:(NSRegularExpressionOptions)options
 {
   NSError *error = nil;
@@ -128,6 +108,24 @@
 @end
 
 
+/*
+@implementation CDVCommandDelegateImpl (GoogleMapsPlugin)
+
+- (void)hookSendPluginResult:(CDVPluginResult*)result callbackId:(NSString*)callbackId {
+
+  NSRange pos = [callbackId rangeOfString:@"://"];
+  if (pos.location == NSNotFound) {
+    [self sendPluginResult:result callbackId:callbackId];
+  } else {
+    NSArray *tmp = [callbackId componentsSeparatedByString:@"://"];
+    NSString *pluginName = [tmp objectAtIndex:0];
+    CDVPlugin<IPluginProtocol> *plugin = [self getCommandInstance:pluginName];
+    [plugin onHookedPluginResult:result callbackId:callbackId];
+  }
+
+}
+@end
+*/
 
 static char CAAnimationGroupBlockKey;
 @implementation CAAnimationGroup (Blocks)
@@ -341,16 +339,16 @@ static char CAAnimationGroupBlockKey;
   
   double minDistance = 999999999;
   double distance;
-  CLLocationCoordinate2D closetPoint = [inspectPoints coordinateAtIndex:0];
+  CLLocationCoordinate2D mostClosePoint;
 
   for (int i = 0; i < [inspectPoints count]; i++) {
     distance = GMSGeometryDistance([inspectPoints coordinateAtIndex:i], point);
     if (distance < minDistance) {
       minDistance = distance;
-      closetPoint = [inspectPoints coordinateAtIndex:i];
+      mostClosePoint = [inspectPoints coordinateAtIndex:i];
     }
   }
-  return closetPoint;
+  return mostClosePoint;
 }
 
 + (BOOL) isInDebugMode
@@ -466,168 +464,6 @@ static char CAAnimationGroupBlockKey;
     result = key;
   }
   return result;
-}
-
-
-+ (void)getJsonWithURL:(NSString *)urlStr params:(NSDictionary *)params completionBlock:(void (^)(BOOL succeeded, NSDictionary *response, NSString *error))completionBlock {
-  
-  NSEnumerator *keys = [params keyEnumerator];
-  NSString *pName;
-  while(pName = [keys nextObject]) {
-    urlStr = [urlStr stringByAppendingFormat:@"%@=%@&", pName, [params objectForKey:pName]];
-  }
-  NSURL *url = [NSURL URLWithString: urlStr];
-  [PluginUtil getJsonWithURL:url completionBlock: completionBlock];
-}
-
-+ (void)getJsonWithURL:(NSURL *)url completionBlock:(void (^)(BOOL succeeded, NSDictionary *response, NSString *error))completionBlock
-{
-
-  NSURLRequest *req = [NSURLRequest requestWithURL:url
-                                        cachePolicy: NSURLRequestReloadIgnoringCacheData
-                                        timeoutInterval:5];
-  //-------------------------------------------------------------
-  // Use NSURLSessionDataTask instead of [NSURLConnection sendAsynchronousRequest]
-  // https://stackoverflow.com/a/20871647
-  //-------------------------------------------------------------
-  NSURLSessionConfiguration *sessionConfiguration = [NSURLSessionConfiguration defaultSessionConfiguration];
-  NSURLSession *session = [NSURLSession sessionWithConfiguration:sessionConfiguration];
-  NSURLSessionDataTask *getTask = [session dataTaskWithRequest:req
-                                             completionHandler:^(NSData *data, NSURLResponse *res, NSError *error) {
-                                               [session finishTasksAndInvalidate];
-
-                          
-                                               NSDictionary *json;
-                                               if (!error) {
-                                                json = [NSJSONSerialization
-                                                                          JSONObjectWithData:data
-                                                                          options:kNilOptions error:&error];
-                                               }
-    
-                                               if (json) {
-                                                 if ([@"OK" isEqualToString:[json objectForKey:@"status"]]) {
-                                                   completionBlock(YES, json, nil);
-                                                 } else {
-                                                   completionBlock(NO, nil, [json objectForKey:@"status"]);
-                                                 }
-                                               } else {
-                                                 NSLog(@"[getJsonWithURL] error = %@", error.description);
-                                                 completionBlock(NO, nil, @"UNKNOWN_ERROR");
-                                               }
-                                             }];
-  [getTask resume];
-
-
-}
-
-+ (void)downloadImageWithURL:(NSURL *)url completionBlock:(void (^)(BOOL succeeded, UIImage *image))completionBlock
-{
-  NSString *urlStr = url.absoluteString;
-  // Since ionic local server declines HTTP access for some reason,
-  // replace URL with file path
-  NSBundle *mainBundle = [NSBundle mainBundle];
-  NSString *wwwPath;
-  #ifdef PGM_PLATFORM_CAPACITOR
-    wwwPath = [mainBundle pathForResource:@"public/cordova" ofType:@"js"];
-    wwwPath = [wwwPath stringByReplacingOccurrencesOfString:@"/cordova.js" withString:@""];
-  #endif
-  #ifdef PGM_PLATFORM_CORDOVA
-    wwwPath = [mainBundle pathForResource:@"www/cordova" ofType:@"js"];
-    wwwPath = [wwwPath stringByReplacingOccurrencesOfString:@"/cordova.js" withString:@""];
-  #endif
-  
-  if ([urlStr containsString:@"assets/"]) {
-    urlStr = [urlStr regReplace:@"^.*assets" replaceTxt:[NSString stringWithFormat:@"%@/assets/", wwwPath] options:NSRegularExpressionCaseInsensitive];
-  }
-  // urlStr = [urlStr stringByReplacingOccurrencesOfString:wwwPath withString: @""];
-  
-  // Some frameworks use own protocol.
-  // Change the url to local path
-  NSRange isLocalhost = [urlStr rangeOfString:@"://localhost"];
-  if (isLocalhost.location != NSNotFound ) {
-    urlStr = [NSString stringWithFormat:@"%@%@", wwwPath, [urlStr substringFromIndex:isLocalhost.location]];
-  }
-
-
-  if ([urlStr hasPrefix:@"file:"] || [urlStr hasPrefix:@"/"]) {
-    NSString *iconPath = [urlStr stringByReplacingOccurrencesOfString:@"file:" withString:@""];
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-    if (![fileManager fileExistsAtPath:iconPath]) {
-      NSLog(@"(error)There is no file at '%@'.", iconPath);
-      completionBlock(NO, nil);
-    } else {
-      UIImage *image = [UIImage imageNamed:iconPath];
-      completionBlock(YES, image);
-    }
-    return;
-  }
-
-  NSURLRequest *req = [NSURLRequest requestWithURL:url
-                                       cachePolicy:NSURLRequestReturnCacheDataElseLoad
-                                   timeoutInterval:5];
-  NSCachedURLResponse *cachedResponse = [[NSURLCache sharedURLCache] cachedResponseForRequest:req];
-  if (cachedResponse != nil) {
-    UIImage *image = [[UIImage alloc] initWithData:cachedResponse.data];
-    if (image) {
-      completionBlock(YES, image);
-      return;
-    }
-  }
-
-  NSString *uniqueKey = url.absoluteString;
-  UIImage *image = [[UIImageCache sharedInstance] getCachedImageForKey:uniqueKey];
-  if (image != nil) {
-    completionBlock(YES, image);
-    return;
-  }
-
-
-  //-------------------------------------------------------------
-  // Use NSURLSessionDataTask instead of [NSURLConnection sendAsynchronousRequest]
-  // https://stackoverflow.com/a/20871647
-  //-------------------------------------------------------------
-  NSURLSessionConfiguration *sessionConfiguration = [NSURLSessionConfiguration defaultSessionConfiguration];
-  NSURLSession *session = [NSURLSession sessionWithConfiguration:sessionConfiguration];
-  NSURLSessionDataTask *getTask = [session dataTaskWithRequest:req
-                                             completionHandler:^(NSData *data, NSURLResponse *res, NSError *error) {
-                                               [session finishTasksAndInvalidate];
-
-                                               UIImage *image = [UIImage imageWithData:data];
-                                               if (image) {
-                                                 [[UIImageCache sharedInstance] cacheImage:image forKey:uniqueKey];
-                                                 completionBlock(YES, image);
-                                                 return;
-                                               }
-
-                                               completionBlock(NO, nil);
-
-                                             }];
-  [getTask resume];
-}
-
-
-+ (double)_latRad:(double)lat {
-  double sin = sinh(lat * M_PI / 180);
-  double radX2 = log((1 + sin) / (1 - sin)) / 2;
-  return MAX(MIN(radX2, M_PI), -M_PI) / 2;
-}
-
-+ (double)_zoom:(double)mapPx worldPx:(double)worldPx fraction:(double)fraction {
-  return floor(log(mapPx / worldPx / fraction) / M_LN2);
-}
-
-+ (double)getZoomFromBounds:(GMSCoordinateBounds *)bounds mapWidth:(double)mapWidth mapHeight:(double)mapHeight {
-  CLLocationCoordinate2D ne = bounds.northEast;
-  CLLocationCoordinate2D sw = bounds.southWest;
-  double latFraction = ([PluginUtil _latRad:ne.latitude] - [PluginUtil _latRad:sw.latitude]) / M_PI;
-  double lngDiff = ne.longitude - sw.longitude;
-  
-  double lngFraction = ((lngDiff < 0) ? (lngDiff + 360) : lngDiff) / 360;
-  
-  double latZoom = [PluginUtil _zoom: mapHeight worldPx:256 fraction: latFraction];
-  double lngZoom = [PluginUtil _zoom: mapWidth worldPx:256 fraction: lngFraction];
-
-  return MIN(MIN(latZoom, lngZoom), 21);
 }
 
 @end
