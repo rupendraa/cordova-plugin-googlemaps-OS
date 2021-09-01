@@ -3,12 +3,12 @@ package plugin.google.maps;
 import android.graphics.Color;
 import android.util.Log;
 
-import com.google.android.libraries.maps.model.CircleOptions;
-import com.google.android.libraries.maps.model.LatLng;
-import com.google.android.libraries.maps.model.LatLngBounds;
-import com.google.android.libraries.maps.model.MarkerOptions;
-import com.google.android.libraries.maps.model.Polyline;
-import com.google.android.libraries.maps.model.PolylineOptions;
+import com.google.android.gms.maps.model.CircleOptions;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
+import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
 
 import org.apache.cordova.CallbackContext;
 import org.json.JSONArray;
@@ -39,15 +39,17 @@ public class PluginPolyline extends MyPlugin implements MyPluginInterface  {
     final String hashCode = args.getString(2);
     polylineHashCode = hashCode;
 
+    int pointCnt = 0;
     if (opts.has("points")) {
       JSONArray points = opts.getJSONArray("points");
       List<LatLng> path = PluginUtil.JSONArray2LatLngList(points);
-      int i = 0;
-      for (i = 0; i < path.size(); i++) {
+      for (int i = 0; i < path.size(); i++) {
         polylineOptions.add(path.get(i));
         builder.include(path.get(i));
       }
+      pointCnt = path.size();
     }
+    final int finalPointCnt = pointCnt;
     if (opts.has("color")) {
       color = PluginUtil.parsePluginColor(opts.getJSONArray("color"));
       polylineOptions.color(color);
@@ -85,7 +87,11 @@ public class PluginPolyline extends MyPlugin implements MyPluginInterface  {
         pluginMap.objects.put(id, polyline);
 
         String boundsId = "polyline_bounds_" + hashCode;
-        pluginMap.objects.put(boundsId, builder.build());
+        if (finalPointCnt > 0) {
+          pluginMap.objects.put(boundsId, builder.build());
+        } else {
+          pluginMap.objects.put(boundsId, new LatLngBounds(new LatLng(360,360), new LatLng(360,360)));
+        }
 
         String propertyId = "polyline_property_" + hashCode;
         pluginMap.objects.put(propertyId, properties);
@@ -159,6 +165,10 @@ public class PluginPolyline extends MyPlugin implements MyPluginInterface  {
 
     id = "polyline_bounds_" + polylineHashCode;
     pluginMap.objects.remove(id);
+
+    String propertyKey = "polyline_property_" + polylineHashCode;
+    pluginMap.objects.remove(propertyKey);
+
 
     cordova.getActivity().runOnUiThread(new Runnable() {
       @Override

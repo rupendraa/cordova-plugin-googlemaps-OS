@@ -17,11 +17,11 @@ import android.os.Build.VERSION;
 import android.os.Bundle;
 import android.util.Base64;
 
-import com.google.android.libraries.maps.model.IndoorBuilding;
-import com.google.android.libraries.maps.model.IndoorLevel;
-import com.google.android.libraries.maps.model.LatLng;
-import com.google.android.libraries.maps.model.LatLngBounds;
-import com.google.android.libraries.maps.model.LatLngBounds.Builder;
+import com.google.android.gms.maps.model.IndoorBuilding;
+import com.google.android.gms.maps.model.IndoorLevel;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
+import com.google.android.gms.maps.model.LatLngBounds.Builder;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaResourceApi;
@@ -431,5 +431,55 @@ public class PluginUtil {
     int resId = PluginUtil.getAppResource(activity, key, "string");
     Resources res = activity.getResources();
     return res.getString(resId);
+  }
+
+  public static String encodePath(List<LatLng> path) {
+    double plat = 0;
+    double plng = 0;
+    StringBuilder builder = new StringBuilder();
+
+    for (LatLng location: path) {
+      builder.append(_encodePoint(plat, plng, location.latitude, location.longitude));
+
+      plat = location.latitude;
+      plng = location.longitude;
+    }
+
+    return builder.toString();
+  }
+
+  private static String _encodePoint(double plat, double plng, double lat, double lng) {
+    long late5 = Math.round(lat * 1e5);
+    long plate5 = Math.round(plat * 1e5);
+
+    long lnge5 = Math.round(lng * 1e5);
+    long plnge5 = Math.round(plng * 1e5);
+
+    long dlng = lnge5 - plnge5;
+    long dlat = late5 - plate5;
+
+    return _encodeSignedNumber(dlat) + _encodeSignedNumber(dlng);
+  }
+  private static String _encodeSignedNumber(long num) {
+    long sgn_num = num << 1;
+
+    if (num < 0) {
+      sgn_num = ~(sgn_num);
+    }
+
+    return (_encodeNumber(sgn_num));
+  }
+
+
+  private static String _encodeNumber(long num) {
+    StringBuilder builder = new StringBuilder();
+
+    while (num >= 0x20) {
+      builder.append(Character.toChars((int) (0x20 | (num & 0x1f)) + 63));
+      num >>= 5;
+    }
+
+    builder.append(Character.toChars((int) num + 63));
+    return builder.toString();
   }
 }
