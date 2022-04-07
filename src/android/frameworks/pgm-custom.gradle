@@ -101,7 +101,8 @@ android {
 
   // parse xml file
   println("configXML:" + configXmlFile)
-  def widget = new XmlSlurper().parse(configXmlFile)
+  def xmlFile = getClass().getResourceAsStream(configXmlFile)
+  def widget = new XmlSlurper().parse(xmlFile)
   if (widget.preference == null) {
     throw new GradleException("widget is null.")
   }
