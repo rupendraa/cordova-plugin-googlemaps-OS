@@ -11,6 +11,12 @@ dependencies {
   implementation(name:'tbxml-android', ext:'aar')
 }
 
+buildscript {
+    dependencies {
+        classpath 'com.google.android.libraries.mapsplatform.secrets-gradle-plugin:secrets-gradle-plugin:2.0.0'
+    }
+}
+
 android {
   compileSdkVersion 28
 
