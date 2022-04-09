@@ -16,7 +16,7 @@
   return list
 }
 
-
+*/
 def searchFileInParents(target) {
   def searchPath = target
   for (int i = 0; i < 8; i++) {
@@ -30,7 +30,7 @@ def searchFileInParents(target) {
   }
   return null;
 }
-
+/*
 def replacePackages(file, cvtList, useAndroidX) {
   def filePath = file.toPath()
   def lines = java.nio.file.Files.readAllLines(filePath)
