@@ -155,7 +155,7 @@
       <preference name="BackgroundColor" value="0"/>
 
       <!-- for this plugin -->
-      <preference name="android-minSdkVersion" value="23"/>
+      <preference name="android-minSdkVersion" value="19"/>
     </config-file>
 
     <config-file target="res/xml/config.xml" parent="/*">
@@ -249,11 +249,11 @@
     <framework src="src/android/frameworks/pgm-custom.gradle" custom="true" type="gradleReference"/>
 
     <config-file target="AndroidManifest.xml" parent="/manifest/application">
-      <meta-data android:name="com.google.android.geo.API_KEY" android:exported="true" android:value="${GOOGLE_MAPS_ANDROID_API_KEY}"/>
+      <meta-data android:name="com.google.android.geo.API_KEY" android:value="${GOOGLE_MAPS_ANDROID_API_KEY}"/>
       <!-- Google Play Services SDK -->
-      <meta-data android:name="com.google.android.gms.version" android:exported="true" android:value="@integer/google_play_services_version"/>
+      <meta-data android:name="com.google.android.gms.version" android:value="@integer/google_play_services_version"/>
       <!-- for Android 9 or above -->
-      <uses-library android:name="org.apache.http.legacy" android:exported="true" android:required="false"/>
+      <uses-library android:name="org.apache.http.legacy" android:required="false"/>
     </config-file>
 
     <config-file target="AndroidManifest.xml" parent="/manifest">

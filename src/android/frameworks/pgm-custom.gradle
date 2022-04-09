@@ -1,4 +1,4 @@
-/*def getConvertListe(useAndroidX) {
+def getConvertListe(useAndroidX) {
   def list = [
           ["com.google.android.gms.maps.model", "com.google.android.libraries.maps.model"],
           ["com.google.android.gms.maps", "com.google.android.libraries.maps"]
@@ -16,7 +16,7 @@
   return list
 }
 
-*/
+
 def searchFileInParents(target) {
   def searchPath = target
   for (int i = 0; i < 8; i++) {
@@ -30,7 +30,7 @@ def searchFileInParents(target) {
   }
   return null;
 }
-/*
+
 def replacePackages(file, cvtList, useAndroidX) {
   def filePath = file.toPath()
   def lines = java.nio.file.Files.readAllLines(filePath)
@@ -57,6 +57,7 @@ def replacePackages(file, cvtList, useAndroidX) {
   }
 
   if (anyChanges) {
+    println(" [changed] " + file)
     def fileWriter = new FileWriter(file)
     def output = new BufferedWriter(fileWriter)
     for (int i = 0; i < linesN; i++) {
@@ -82,11 +83,11 @@ def replaceFiles(matchingPattern, cvtList, useAndroidX) {
     replacePackages(file, cvtList, useAndroidX)
   }
 }
-*/
+
 android {
   // #1. Find (project)/config.xml file,
   //     because ionic capacitor does not copy <preference> nodes
-  def configXmlFile; // = searchFileInParents("config.xml")
+  def configXmlFile = searchFileInParents("config.xml")
 
   if (configXmlFile == null) {
     // #2. Find (project)/app/src/main/res/xml/config.xml file,
@@ -98,6 +99,7 @@ android {
     throw new GradleException("Can not find config.xml file.")
   }
 
+  // parse xml file
   def widget = new XmlParser().parse(configXmlFile)
   if (widget.preference == null) {
     throw new GradleException("widget is null.")
@@ -108,15 +110,15 @@ android {
   Properties props = new Properties()
   def isKeyFound = 0
 
-  props.setProperty("GOOGLE_MAPS_PLAY_SERVICES_LOCATION_VERSION", "19.0.1");
-  props.setProperty("GOOGLE_MAPS_ANDROID_SUPPORT_V4_VERSION", "28.0.0");
-  props.setProperty("GOOGLE_MAPS_PLAY_SERVICES_VERSION", "18.0.2");
+  props.setProperty("GOOGLE_MAPS_PLAY_SERVICES_LOCATION_VERSION", "16.0.0");
+  props.setProperty("GOOGLE_MAPS_ANDROID_SUPPORT_V4_VERSION", "27.1.1");
+  props.setProperty("GOOGLE_MAPS_PLAY_SERVICES_VERSION", "16.1.0");
 
 
   widget.preference.each { pref ->
     def name = pref.attributes().name
     def value = pref.attributes().value
-
+    println("name = " + name);
     if (name == "GOOGLE_MAPS_ANDROID_API_KEY") {
       isKeyFound = 1
       props.setProperty(name, value)
@@ -142,30 +144,17 @@ android {
   //-----------------------------------------------
   // Replace the source code of this plugin
   //-----------------------------------------------
-  //def cvtList = getConvertListe(useAndroidX)
+  def cvtList = getConvertListe(useAndroidX)
 
-  //replaceFiles("**/plugin/google/maps/*.java", cvtList, useAndroidX)
+  replaceFiles("**/plugin/google/maps/*.java", cvtList, useAndroidX)
 
   if (useAndroidX) {
     //----------
     // maps SDK
     //----------
-  /*
+
     dependencies {
-      implementation 'com.google.android.gms:play-services-location:19.0.1'
-      implementation 'com.android.support:multidex:1.0.3'
-    }
-    */
-    def PLAY_SERVICES_VERSION = props.getProperty("GOOGLE_MAPS_PLAY_SERVICES_VERSION")
-    def PLAY_SERVICES_LOCATION_VERSION = props.getProperty("GOOGLE_MAPS_PLAY_SERVICES_LOCATION_VERSION")
-    def ANDROID_SUPPORT_V4_VERSION = props.getProperty("GOOGLE_MAPS_ANDROID_SUPPORT_V4_VERSION")
-    println("---->GOOGLE_MAPS_PLAY_SERVICES_VERSION = ${PLAY_SERVICES_VERSION}")
-    println("---->GOOGLE_MAPS_PLAY_SERVICES_LOCATION_VERSION = ${PLAY_SERVICES_LOCATION_VERSION}")
-    println("---->GOOGLE_MAPS_ANDROID_SUPPORT_V4_VERSION = ${ANDROID_SUPPORT_V4_VERSION}")
-    dependencies {
-      implementation "com.google.android.gms:play-services-maps:${PLAY_SERVICES_VERSION}"
-      implementation "com.google.android.gms:play-services-location:${PLAY_SERVICES_LOCATION_VERSION}"
-      //implementation "com.android.support:support-core-utils:${ANDROID_SUPPORT_V4_VERSION}"
+      implementation 'com.google.android.libraries.maps:maps:3.1.0-beta'
       implementation 'com.android.support:multidex:1.0.3'
     }
 
