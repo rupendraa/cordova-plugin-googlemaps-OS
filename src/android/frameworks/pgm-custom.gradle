@@ -146,9 +146,11 @@ android {
   //-----------------------------------------------
   // Replace the source code of this plugin
   //-----------------------------------------------
+  /*
   def cvtList = getConvertListe(useAndroidX)
 
   replaceFiles("**/plugin/google/maps/*.java", cvtList, useAndroidX)
+  */
 
   if (useAndroidX) {
     //----------
