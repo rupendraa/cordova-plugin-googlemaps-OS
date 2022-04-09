@@ -3,12 +3,12 @@ package plugin.google.maps;
 import android.content.res.Resources;
 import android.os.AsyncTask;
 
-import com.google.android.libraries.maps.CameraUpdate;
-import com.google.android.libraries.maps.CameraUpdateFactory;
-import com.google.android.libraries.maps.GoogleMap;
-import com.google.android.libraries.maps.model.CameraPosition;
-import com.google.android.libraries.maps.model.LatLng;
-import com.google.android.libraries.maps.model.LatLngBounds;
+import com.google.android.gms.maps.CameraUpdate;
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.model.CameraPosition;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.PluginResult;
