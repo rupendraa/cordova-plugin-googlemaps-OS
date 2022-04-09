@@ -1,4 +1,4 @@
-def getConvertListe(useAndroidX) {
+/*def getConvertListe(useAndroidX) {
   def list = [
           ["com.google.android.gms.maps.model", "com.google.android.libraries.maps.model"],
           ["com.google.android.gms.maps", "com.google.android.libraries.maps"]
@@ -82,7 +82,7 @@ def replaceFiles(matchingPattern, cvtList, useAndroidX) {
     replacePackages(file, cvtList, useAndroidX)
   }
 }
-
+*/
 android {
   // #1. Find (project)/config.xml file,
   //     because ionic capacitor does not copy <preference> nodes
