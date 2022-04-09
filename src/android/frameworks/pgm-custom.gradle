@@ -1,7 +1,7 @@
 def getConvertListe(useAndroidX) {
   def list = [
-          ["com.google.android.gms.maps.model", "com.google.android.libraries.maps.model"],
-          ["com.google.android.gms.maps", "com.google.android.libraries.maps"]
+          ["com.google.android.gms.maps.model", "com.google.android.gms.maps.model"],
+          ["com.google.android.gms.maps", "com.google.android.gms.maps"]
   ]
 
   if (!useAndroidX) {
@@ -175,7 +175,7 @@ def detectEnvironment() {
   def configFilePath = ""
   def list = [
     ["capacitor.config.json", "capacitor"],
-    ["config.xml", "cordova"],
+    //["config.xml", "cordova"],
     ["app/src/main/res/xml/config.xml", "cordova"]
   ]
 
@@ -234,9 +234,9 @@ android {
       multiDexEnabled true
     }
   } else {
-    def PLAY_SERVICES_LOCATION_VERSION = env.getConfigOrDefault("GOOGLE_MAPS_PLAY_SERVICES_LOCATION_VERSION", "16.0.0")
-    def PLAY_SERVICES_VERSION = env.getConfigOrDefault("GOOGLE_MAPS_PLAY_SERVICES_VERSION", "16.1.0")
-    def ANDROID_SUPPORT_V4_VERSION = env.getConfigOrDefault("GOOGLE_MAPS_ANDROID_SUPPORT_V4_VERSION", "27.1.1")
+    def PLAY_SERVICES_LOCATION_VERSION = env.getConfigOrDefault("GOOGLE_MAPS_PLAY_SERVICES_LOCATION_VERSION", "19.0.1")
+    def PLAY_SERVICES_VERSION = env.getConfigOrDefault("GOOGLE_MAPS_PLAY_SERVICES_VERSION", "18.0.2")
+    def ANDROID_SUPPORT_V4_VERSION = env.getConfigOrDefault("GOOGLE_MAPS_ANDROID_SUPPORT_V4_VERSION", "28.0.0")
 
     dependencies {
       implementation "com.google.android.gms:play-services-location:${PLAY_SERVICES_LOCATION_VERSION}"
