@@ -100,9 +100,6 @@ android {
     throw new GradleException("Can not find config.xml file.")
   }
 
-  // parse xml file
-  println("configXML:" + configXmlFile)
-  //def xmlFile = getClass().getResourceAsStream(configXmlFile)
   def widget = new XmlParser().parse(configXmlFile)
   if (widget.preference == null) {
     throw new GradleException("widget is null.")
@@ -121,7 +118,7 @@ android {
   widget.preference.each { pref ->
     def name = pref.attributes().name
     def value = pref.attributes().value
-    println("name = " + name);
+    
     if (name == "GOOGLE_MAPS_ANDROID_API_KEY") {
       isKeyFound = 1
       props.setProperty(name, value)
@@ -147,9 +144,9 @@ android {
   //-----------------------------------------------
   // Replace the source code of this plugin
   //-----------------------------------------------
-  def cvtList = getConvertListe(useAndroidX)
+  //def cvtList = getConvertListe(useAndroidX)
 
-  replaceFiles("**/plugin/google/maps/*.java", cvtList, useAndroidX)
+  //replaceFiles("**/plugin/google/maps/*.java", cvtList, useAndroidX)
 
   if (useAndroidX) {
     //----------
