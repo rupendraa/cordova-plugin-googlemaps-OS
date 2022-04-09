@@ -29,8 +29,8 @@ function CordovaGoogleMaps(execCmd) {
   self.MAP_CNT = 0;
 
   var removeMapDiv = function(node) {
-    if (node.__pluginMapId !== undefined && !node.parentNode) {
-      var mapId = node.__pluginMapId;
+    if (node.hasAttribute('__pluginmapid') && !node.parentNode) {
+      var mapId = node.getAttribute('__pluginmapid');
       var map = self.MAPS[mapId];
       if (map) {
         map.remove();
@@ -39,12 +39,9 @@ function CordovaGoogleMaps(execCmd) {
     } else {
       var childNodes = Array.prototype.slice.call(node.childNodes);
       childNodes.forEach(function(child) {
-        if (child.outerHTML && child.__pluginMapId) {
+        if (child.outerHTML && child.outerHTML.indexOf('__pluginmapid') > -1) {
           removeMapDiv(child);
         }
-        // if (child.outerHTML && child.outerHTML.indexOf('__pluginmapid') > -1) {
-        //   removeMapDiv(child);
-        // }
       });
     }
   };
@@ -59,12 +56,9 @@ function CordovaGoogleMaps(execCmd) {
         if (record.removedNodes.length > 0) {
           record.removeNodes = Array.prototype.slice.call(record.removedNodes, 0);
           record.removeNodes.forEach(function(node) {
-            if (node.outerHTML && node.__pluginMapId) {
+            if (node.outerHTML && node.outerHTML.indexOf('__pluginmapid') > -1) {
               removeMapDiv(node);
             }
-            // if (node.outerHTML && node.outerHTML.indexOf('__pluginmapid') > -1) {
-            //   removeMapDiv(node);
-            // }
           });
         }
       });
@@ -95,7 +89,7 @@ CordovaGoogleMaps.prototype.getMap = function(div, mapOptions) {
     mapId;
 
   if (common.isDom(div)) {
-    mapId = div.__pluginMapId;
+    mapId = div.getAttribute('__pluginMapId');
 
     // Wow, the app specifies the map div that has already another map,
     // but the app try to create new map.
@@ -185,19 +179,10 @@ CordovaGoogleMaps.prototype._remove = function(mapId) {
 
     var div = map.getDiv();
     if (!div) {
-      var eles = Array.from(document.querySelectorAll('*'));
-      eles = eles.filter(function(e) {
-        return e.__pluginMapId === mapId;
-      });
-      if (eles.length === 1) {
-        div = eles[0];
-      }
+      div = document.querySelector('[__pluginMapId="' + mapId + '"]');
     }
     if (div) {
-      Object.defineProperty(div, '__pluginMapId', {
-        enumerable: false,
-        value: undefined
-      });
+      div.removeAttribute('__pluginMapId');
     }
 
     self.MAPS[mapId].destroy();
@@ -230,10 +215,7 @@ function postPanoramaInit(panorama, div, options) {
   // If the mapDiv is specified,
   // the native side needs to know the map div position
   // before creating the map view.
-  Object.defineProperty(div, '__pluginMapId', {
-    enumerable: false,
-    value: mapId
-  });
+  div.setAttribute('__pluginMapId', mapId);
 
   if (div.offsetWidth < 100 || div.offsetHeight < 100) {
     console.error('[GoogleMaps] Minimum container dimention is 100x100 in pixels.', div);
@@ -247,10 +229,7 @@ function postPanoramaInit(panorama, div, options) {
   // If the mapDiv is specified,
   // the native side needs to know the map div position
   // before creating the map view.
-  Object.defineProperty(div, '__pluginMapId', {
-    enumerable: false,
-    value: mapId
-  });
+  div.setAttribute('__pluginMapId', mapId);
 
   panorama.getPanorama.apply(panorama, args);
 }
@@ -275,10 +254,7 @@ function postMapInit(map, div, options) {
     // If the mapDiv is specified,
     // the native side needs to know the map div position
     // before creating the map view.
-    Object.defineProperty(div, '__pluginMapId', {
-      enumerable: false,
-      value: mapId
-    });
+    div.setAttribute('__pluginMapId', mapId);
 
     args.push({
       __pgmId: mapId,

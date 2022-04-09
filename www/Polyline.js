@@ -1,7 +1,5 @@
-
 var utils = require('cordova/utils'),
   common = require('./Common'),
-  encoding = require('./encoding'),
   Overlay = require('./Overlay');
 
 /*****************************************************************************
@@ -85,9 +83,6 @@ utils.extend(Polyline, Overlay);
 
 Polyline.prototype.setPoints = function (points) {
   var self = this;
-  if (typeof points === 'string') {
-    points = encoding.decodePath(points);;
-  }
   var mvcArray = self.points;
   mvcArray.empty(true);
 

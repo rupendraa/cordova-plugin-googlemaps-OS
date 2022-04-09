@@ -1,5 +1,3 @@
-
-
 module.exports = {
   MAP_READY: 'map_ready',
   MAP_CLICK: 'map_click',
@@ -33,6 +31,5 @@ module.exports = {
   PANORAMA_READY: 'panorama_ready',
   PANORAMA_CAMERA_CHANGE: 'panorama_camera_change',
   PANORAMA_LOCATION_CHANGE: 'panorama_location_change',
-  PANORAMA_CLICK: 'panorama_click',
-  DIRECTIONS_CHANGED: 'directions_changed'
+  PANORAMA_CLICK: 'panorama_click'
 };
