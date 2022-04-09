@@ -1,7 +1,7 @@
 def getConvertListe(useAndroidX) {
   def list = [
-          ["com.google.android.gms.maps.model", "com.google.android.gms.maps.model"],
-          ["com.google.android.gms.maps", "com.google.android.gms.maps"]
+          ["com.google.android.gms.maps.model", "com.google.android.libraries.maps.model"],
+          ["com.google.android.gms.maps", "com.google.android.libraries.maps"]
   ]
 
   if (!useAndroidX) {
@@ -38,6 +38,7 @@ def replacePackages(file, cvtList, useAndroidX) {
   def listN = cvtList.size()
   def anyChanges = false
   for (int i = 0; i < linesN; i++) {
+    println("file: "+lines.get(i))
     def line = lines.get(i)
     def needReplace = false;
     if (useAndroidX && line.contains('android.')) {
@@ -146,9 +147,9 @@ android {
   //-----------------------------------------------
   // Replace the source code of this plugin
   //-----------------------------------------------
-  //def cvtList = getConvertListe(useAndroidX)
+  def cvtList = getConvertListe(useAndroidX)
 
-  //replaceFiles("**/plugin/google/maps/*.java", cvtList, useAndroidX)
+  replaceFiles("**/plugin/google/maps/*.java", cvtList, useAndroidX)
 
   if (useAndroidX) {
     //----------
