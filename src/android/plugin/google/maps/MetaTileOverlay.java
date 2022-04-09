@@ -1,6 +1,6 @@
 package plugin.google.maps;
 
-import com.google.android.libraries.maps.model.TileOverlay;
+import com.google.android.gms.maps.model.TileOverlay;
 
 import org.json.JSONObject;
 
