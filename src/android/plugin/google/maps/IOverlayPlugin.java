@@ -1,6 +1,6 @@
 package plugin.google.maps;
 
-import com.google.android.libraries.maps.GoogleMap;
+import com.google.android.gms.maps.GoogleMap;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaArgs;
