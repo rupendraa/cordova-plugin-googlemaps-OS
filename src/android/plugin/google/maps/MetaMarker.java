@@ -2,8 +2,8 @@ package plugin.google.maps;
 
 import android.util.Size;
 
-import com.google.android.libraries.maps.model.LatLng;
-import com.google.android.libraries.maps.model.Marker;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 
 import org.json.JSONObject;
 
