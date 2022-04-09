@@ -87,7 +87,7 @@ def replaceFiles(matchingPattern, cvtList, useAndroidX) {
 android {
   // #1. Find (project)/config.xml file,
   //     because ionic capacitor does not copy <preference> nodes
-  def configXmlFile = searchFileInParents("config.xml")
+  def configXmlFile;//= searchFileInParents("config.xml")
 
   if (configXmlFile == null) {
     // #2. Find (project)/app/src/main/res/xml/config.xml file,
