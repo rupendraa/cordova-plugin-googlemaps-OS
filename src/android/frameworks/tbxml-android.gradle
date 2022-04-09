@@ -8,16 +8,9 @@ repositories {
 }
 
 dependencies {
+  implementation 'com.google.android.gms:play-services-location:19.0.1'
   implementation(name:'tbxml-android', ext:'aar')
 }
-
-buildscript {
-    dependencies {
-        classpath 'com.google.android.libraries.mapsplatform.secrets-gradle-plugin:secrets-gradle-plugin:2.0.0'
-    }
-}
-
-apply plugin: com.google.android.libraries.mapsplatform.secrets-gradle-plugin
 
 android {
   compileSdkVersion 28
