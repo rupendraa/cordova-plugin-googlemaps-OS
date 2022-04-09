@@ -1,8 +1,8 @@
 package plugin.google.maps;
 
-import com.google.android.libraries.maps.model.LatLng;
-import com.google.android.libraries.maps.model.LatLngBounds;
-import com.google.android.libraries.maps.model.Polygon;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
+import com.google.android.gms.maps.model.Polygon;
 
 import org.json.JSONObject;
 
