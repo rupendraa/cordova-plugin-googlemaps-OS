@@ -27,28 +27,24 @@
 }
 
 - (void)attachView:(UIView *)view depth:(NSInteger)depth {
+  if (view.superview) {
+    return;
+  }
   NSArray *subviews = [self subviews];
-  UIView *subview;
-  NSInteger tag;
   int viewCnt = (int)[subviews count];
-  int index = viewCnt;
-  for (int i = 0; i < viewCnt; i++) {
-    subview = [subviews objectAtIndex: i];
-    tag = subview.tag;
-    if (tag == 0) {
-      continue;
-    }
-    if (tag > depth) {
-      index = i;
-      break;
+  
+  for (int i = viewCnt - 1; i >= 0; i--) {
+    if (((UIView *)[subviews objectAtIndex:i]).tag < depth) {
+      [self insertSubview:view atIndex: i];
+      return;;
     }
   }
   
-  [self insertSubview:view atIndex:index];
+  [self addSubview:view];
 }
 - (void)detachView:(UIView *)view {
   [view removeFromSuperview];
-  
+
 }
 
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
