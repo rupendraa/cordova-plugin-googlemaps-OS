@@ -169,7 +169,7 @@ android {
     dependencies {
       implementation "com.google.android.gms:play-services-maps:${PLAY_SERVICES_VERSION}"
       implementation "com.google.android.gms:play-services-location:${PLAY_SERVICES_LOCATION_VERSION}"
-      implementation "com.android.support:support-core-utils:${ANDROID_SUPPORT_V4_VERSION}"
+      //implementation "com.android.support:support-core-utils:${ANDROID_SUPPORT_V4_VERSION}"
       implementation 'com.android.support:multidex:1.0.3'
     }
 
