@@ -1,7 +1,7 @@
 package plugin.google.maps;
 
-import com.google.android.libraries.maps.CameraUpdate;
-import com.google.android.libraries.maps.model.LatLngBounds;
+import com.google.android.gms.maps.CameraUpdate;
+import com.google.android.gms.maps.model.LatLngBounds;
 
 public class AsyncUpdateCameraPositionResult {
     CameraUpdate cameraUpdate;
