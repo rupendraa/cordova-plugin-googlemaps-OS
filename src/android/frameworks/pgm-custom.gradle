@@ -144,10 +144,10 @@ android {
   //-----------------------------------------------
   // Replace the source code of this plugin
   //-----------------------------------------------
-  def cvtList = getConvertListe(useAndroidX)
+  //def cvtList = getConvertListe(useAndroidX)
 
-  replaceFiles("**/plugin/google/maps/*.java", cvtList, useAndroidX)
-
+  //replaceFiles("**/plugin/google/maps/*.java", cvtList, useAndroidX)
+  useAndroidX = false
   if (useAndroidX) {
     //----------
     // maps SDK
