@@ -223,7 +223,7 @@ android {
   def useAndroidX = hasUseAndroidX && hasEnableJetifier &&
           'true' == project.ext.get('android.useAndroidX') &&
           'true' == project.ext.get('android.enableJetifier')
-
+  useAndroidX = false
   if (useAndroidX) {
     dependencies {
       implementation 'com.google.android.libraries.maps:maps:3.1.0-beta'
@@ -249,9 +249,9 @@ android {
   //-----------------------------------------------
   // Replace the source code of this plugin
   //-----------------------------------------------
-  def cvtList = getConvertListe(useAndroidX)
+  //def cvtList = getConvertListe(useAndroidX)
 
-  replaceFiles("**/plugin/google/maps/*.java", cvtList, useAndroidX)
+  //replaceFiles("**/plugin/google/maps/*.java", cvtList, useAndroidX)
 
   //-------------------------------------------
   // Set the API key into AndroidManifest.xml
