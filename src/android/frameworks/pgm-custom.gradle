@@ -175,7 +175,7 @@ def detectEnvironment() {
   def configFilePath = ""
   def list = [
     ["capacitor.config.json", "capacitor"],
-    ["config.xml", "cordova"],
+    //["config.xml", "cordova"],
     ["app/src/main/res/xml/config.xml", "cordova"]
   ]
 
