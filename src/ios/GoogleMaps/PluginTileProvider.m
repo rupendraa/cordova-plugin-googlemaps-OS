@@ -18,7 +18,8 @@ NSDictionary *debugAttributes;
 - (id)initWithOptions:(NSDictionary *) options webView:(UIView *)webView{
     self = [super init];
     self.webView  = webView;
-  
+    //self.tileUrlFormat = [options objectForKey:@"tileUrlFormat"];
+    self.webPageUrl = [options objectForKey:@"webPageUrl"];
     if ([options objectForKey:@"tileSize"]) {
         self.tileSize = [[options objectForKey:@"tileSize"] floatValue];
     } else {
@@ -47,6 +48,8 @@ NSDictionary *debugAttributes;
       };
     }
 
+    self.imgCache = [[NSCache alloc]init];
+    self.imgCache.totalCostLimit = 3 * 1024 * 1024 * 1024; // 3MB = Cache for image
     self.executeQueue =  [NSOperationQueue new];
 
     return self;
@@ -61,7 +64,6 @@ NSDictionary *debugAttributes;
 }
 
 - (void)onGetTileUrlFromJS:(NSString *)urlKey tileUrl:(NSString *)tileUrl {
-  
     @synchronized (self.tileUrlMap) {
       [self.tileUrlMap setObject:tileUrl forKey:urlKey];
       dispatch_semaphore_signal(self.semaphore);
@@ -130,37 +132,72 @@ NSDictionary *debugAttributes;
     return;
   }
 
-  NSRange range = [urlStr rangeOfString:@"://"];
-  if (range.location != -1) {
+  NSRange range = [urlStr rangeOfString:@"http"];
+  if (range.location == 0) {
       //-------------------------
       // http:// or https://
       //-------------------------
       [self downloadImageWithX:x y:y zoom:zoom url:[NSURL URLWithString:urlStr] receiver:receiver];
       return;
-  } else {
-      //-------------------------
-      // Absolute file path
-      //-------------------------
-      urlStr = [NSString stringWithFormat:@"file://%@", urlStr];
+  }
+  urlStr = [urlStr stringByReplacingOccurrencesOfString:@"file://" withString:@""];
 
-      //-------------------------
-      // file path
-      //-------------------------
-      urlStr = [urlStr stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  range = [urlStr rangeOfString:@"://"];
+  if (range.location == NSNotFound) {
 
-      NSFileManager *fileManager = [NSFileManager defaultManager];
-      if (![fileManager fileExistsAtPath:urlStr]) {
-         if (self.isDebug) {
-           UIImage *image = [self drawDebugInfoWithImage:nil
-                                               x:x
-                                               y:y
-                                               zoom:zoom
-                                               url: originalUrlStr];
-           [receiver receiveTileWithX:x y:y zoom:zoom image:image];
-         } else {
-           [receiver receiveTileWithX:x y:y zoom:zoom image:kGMSTileLayerNoTile];
-         }
-         return;
+      range = [urlStr rangeOfString:@"/"];
+      if (range.location != 0) {
+          //-------------------------------------------------------
+          // Get the current URL, then calculate the relative path.
+          //-------------------------------------------------------
+          NSString *currentURL = [NSString stringWithString:self.webPageUrl];
+          currentURL = [currentURL stringByDeletingLastPathComponent];
+          currentURL = [currentURL stringByReplacingOccurrencesOfString:@"http:/localhost" withString:@"http://localhost"];
+          currentURL = [currentURL regReplace:@"\\#.*$" replaceTxt:@"" options:NSRegularExpressionCaseInsensitive];
+          currentURL = [currentURL regReplace:@"\\?.*$" replaceTxt:@"" options:NSRegularExpressionCaseInsensitive];
+          currentURL = [currentURL regReplace:@"[^\\/]*$" replaceTxt:@"" options:NSRegularExpressionCaseInsensitive];
+
+          currentURL = [currentURL stringByReplacingOccurrencesOfString:@"file:" withString:@""];
+
+          urlStr = [NSString stringWithFormat:@"%@%@", currentURL, urlStr];
+          NSRange range = [currentURL rangeOfString:@"http"];
+          if (range.location == 0) {
+            //-------------------------
+            // http:// or https://
+            //-------------------------
+            [self downloadImageWithX:x y:y zoom:zoom url:[NSURL URLWithString:urlStr] receiver:receiver];
+            return;
+          }
+          currentURL = [currentURL stringByReplacingOccurrencesOfString:@"//" withString:@"/"];
+          urlStr = [NSString stringWithFormat:@"file://%@/%@", currentURL, urlStr];
+      } else {
+          //-------------------------
+          // Absolute file path
+          //-------------------------
+          urlStr = [NSString stringWithFormat:@"file://%@", urlStr];
+      }
+
+      range = [urlStr rangeOfString:@"file://"];
+      if (range.location != NSNotFound) {
+          //-------------------------
+          // file path
+          //-------------------------
+          urlStr = [urlStr stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+
+          NSFileManager *fileManager = [NSFileManager defaultManager];
+          if (![fileManager fileExistsAtPath:urlStr]) {
+             if (self.isDebug) {
+               UIImage *image = [self drawDebugInfoWithImage:nil
+                                                   x:x
+                                                   y:y
+                                                   zoom:zoom
+                                                   url: originalUrlStr];
+               [receiver receiveTileWithX:x y:y zoom:zoom image:image];
+             } else {
+               [receiver receiveTileWithX:x y:y zoom:zoom image:kGMSTileLayerNoTile];
+             }
+             return;
+          }
       }
 
 
@@ -240,22 +277,97 @@ NSDictionary *debugAttributes;
 
 - (void)downloadImageWithX:(NSUInteger)x y:(NSUInteger)y  zoom:(NSUInteger)zoom  url:(NSURL *)url receiver: (id<GMSTileReceiver>) receiver
 {
-  [PluginUtil downloadImageWithURL:url completionBlock:^(BOOL succeeded, UIImage *image) {
+  [self.executeQueue addOperationWithBlock:^{
 
-    if (image) {
-      if (self.isDebug) {
-        image = [self drawDebugInfoWithImage:image
-                                            x:x
-                                            y:y
-                                            zoom:zoom
-                                            url: url.absoluteString];
+    NSURLRequest *req = [NSURLRequest requestWithURL:url
+                                         cachePolicy:NSURLRequestReturnCacheDataElseLoad
+                                     timeoutInterval:5];
+    NSCachedURLResponse *cachedResponse = [[NSURLCache sharedURLCache] cachedResponseForRequest:req];
+    if (cachedResponse != nil) {
+      UIImage *image = [[UIImage alloc] initWithData:cachedResponse.data];
+      if (image) {
+        if (self.isDebug) {
+          image = [self drawDebugInfoWithImage:image
+                                             x:x
+                                             y:y
+                                             zoom:zoom
+                                             url: url.absoluteString];
+        }
+        [receiver receiveTileWithX:x y:y zoom:zoom image:image];
+        return;
       }
-      [receiver receiveTileWithX:x y:y zoom:zoom image:image];
-      return;
     }
-    
+
+    NSString *uniqueKey = url.absoluteString;
+    NSData *cache = [self.imgCache objectForKey:uniqueKey];
+    if (cache != nil) {
+      UIImage *image = [[UIImage alloc] initWithData:cache];
+      if (image) {
+        if (self.isDebug) {
+          image = [self drawDebugInfoWithImage:image
+                                             x:x
+                                             y:y
+                                             zoom:zoom
+                                             url: url.absoluteString];
+        }
+        [receiver receiveTileWithX:x y:y zoom:zoom image:image];
+        return;
+      }
+    }
+
+    //-------------------------------------------------------------
+    // Use NSURLSessionDataTask instead of [NSURLConnection sendAsynchronousRequest]
+    // https://stackoverflow.com/a/20871647
+    //-------------------------------------------------------------
+    NSURLSessionConfiguration *sessionConfiguration = [NSURLSessionConfiguration defaultSessionConfiguration];
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:sessionConfiguration];
+    NSURLSessionDataTask *getTask = [session dataTaskWithRequest:req
+                             completionHandler:^(NSData *data, NSURLResponse *res, NSError *error) {
+                               [session finishTasksAndInvalidate];
+                               if ( !error ) {
+                                 [self.imgCache setObject:data forKey:uniqueKey cost:data.length];
+                                 UIImage *image = [UIImage imageWithData:data];
+                                 if (self.isDebug) {
+                                   image = [self drawDebugInfoWithImage:image
+                                                                       x:x
+                                                                       y:y
+                                                                       zoom:zoom
+                                                                       url: url.absoluteString];
+                                 }
+                                 [receiver receiveTileWithX:x y:y zoom:zoom image:image];
+                               } else {
+                                 if (self.isDebug) {
+                                   UIImage *image = [self drawDebugInfoWithImage:nil
+                                                                       x:x
+                                                                       y:y
+                                                                       zoom:zoom
+                                                                       url: url.absoluteString];
+                                   [receiver receiveTileWithX:x y:y zoom:zoom image:image];
+                                 } else {
+                                   [receiver receiveTileWithX:x y:y zoom:zoom image:kGMSTileLayerNoTile];
+                                 }
+                               }
+
+                            }];
+    [getTask resume];
+    //-------------------------------------------------------------
+    // NSURLConnection sendAsynchronousRequest is deprecated.
+    //-------------------------------------------------------------
+/*
+    [NSURLConnection sendAsynchronousRequest:req
+                                       queue:self.executeQueue
+                           completionHandler:^(NSURLResponse *res, NSData *data, NSError *error) {
+                             if ( !error ) {
+                               [self.imgCache setObject:data forKey:uniqueKey cost:data.length];
+                               UIImage *image = [UIImage imageWithData:data];
+                               [receiver receiveTileWithX:x y:y zoom:zoom image:image];
+                             } else {
+                               [receiver receiveTileWithX:x y:y zoom:zoom image:kGMSTileLayerNoTile];
+                             }
+
+                           }];
+*/
   }];
-  
 
 }
 

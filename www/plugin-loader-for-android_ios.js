@@ -30,6 +30,9 @@ if (!cordova) {
         window.plugin.google.maps = window.plugin.google.maps || module.exports;
       }
 
+      cordova.exec(null, function (message) {
+        alert(message);
+      }, 'PluginEnvironment', 'isAvailable', ['']);
     }, {
       once: true
     });
@@ -151,8 +154,6 @@ if (!cordova) {
     environment: require('./Environment'),
     Geocoder: require('./Geocoder')(execCmd),
     LocationService: require('./LocationService')(execCmd),
-    ElevationService: require('./ElevationService')(execCmd),
-    DirectionsService: require('./DirectionsService')(execCmd),
     geometry: {
       encoding: require('./encoding'),
       spherical: require('./spherical'),

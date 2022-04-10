@@ -6,7 +6,7 @@ var BaseClass = require('./BaseClass'),
 /*****************************************************************************
  * Overlay Class
  *****************************************************************************/
-var Overlay = function (map, options, type, _exec, extras) {
+var Overlay = function (map, options, className, _exec, extras) {
   extras = extras || {};
   BaseClass.apply(this);
 
@@ -59,18 +59,18 @@ var Overlay = function (map, options, type, _exec, extras) {
     writable: false
   });
   Object.defineProperty(self, '__pgmId', {
-    value: extras.__pgmId || (type.toLowerCase()) + '_' + this.hashCode,
+    value: extras.__pgmId || (className.toLowerCase()) + '_' + this.hashCode,
     writable: false
   });
   Object.defineProperty(self, 'type', {
-    value: type,
+    value: className,
     writable: false
   });
 
   Object.defineProperty(self, 'getPluginName', {
     writable: false,
     value: function () {
-      return this.map.getId() + '-' + type.toLowerCase();
+      return this.map.getId() + '-' + className.toLowerCase();
     }
   });
 };

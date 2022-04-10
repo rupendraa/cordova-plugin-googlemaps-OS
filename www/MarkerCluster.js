@@ -102,27 +102,6 @@ var MarkerCluster = function (map, markerClusterOptions, _exec) {
     if (!icons[i]) {
       continue;
     }
-    var link;
-    if (typeof icons[i] === 'string') {
-      if (icons[i].indexOf('://') === -1 &&
-        icons[i].indexOf('.') === 0) {
-
-        link = document.createElement('a');
-        link.href = icons[i];
-        icons[i] = link.protocol + '//' + link.host + link.pathname + link.search;
-        link = undefined;
-      }
-    } else if (typeof icons[i].url === 'string') {
-      if (icons[i].url.indexOf('://') === -1 &&
-        icons[i].url.indexOf('.') === 0) {
-
-        link = document.createElement('a');
-        link.href = icons[i].url;
-        icons[i].url = link.protocol + '//' + link.host + link.pathname + link.search;
-        link = undefined;
-      }
-
-    }
     if (icons[i].anchor &&
       typeof icons[i].anchor === 'object' &&
       'x' in icons[i].anchor &&
@@ -157,29 +136,6 @@ var MarkerCluster = function (map, markerClusterOptions, _exec) {
       geocell: geocell
     };
 
-    if (typeof markerOptions.icon === 'string') {
-      if (markerOptions.icon.indexOf('://') === -1 &&
-        markerOptions.icon.indexOf('.') === 0) {
-
-        link = document.createElement('a');
-        link.href = markerOptions.icon;
-        markerOptions.icon = {
-          'url': link.protocol + '//' + link.host + link.pathname + link.search
-        };
-        link = undefined;
-      }
-    } else if (typeof markerOptions.icon === 'object' && typeof markerOptions.icon.url === 'string') {
-      if (markerOptions.icon.url.indexOf('://') === -1 &&
-        markerOptions.icon.url.indexOf('.') === 0) {
-
-        link = document.createElement('a');
-        link.href = markerOptions.icon.url;
-        markerOptions.icon.url = link.protocol + '//' + link.host + link.pathname + link.search;
-        link = undefined;
-      }
-    }
-
-
     var marker = self._createMarker(markerOptions);
     var markerId = marker.__pgmId.replace(/^.+-/, '');
     Object.defineProperty(marker, '__cid', {
@@ -195,7 +151,6 @@ var MarkerCluster = function (map, markerClusterOptions, _exec) {
     });
     return marker;
   };
-
   self.addMarkers = function (markers) {
     var results = [];
     if (utils.isArray(markers) || Array.isArray(markers)) {
@@ -265,18 +220,8 @@ MarkerCluster.prototype.onClusterClicked = function (cluster) {
   var zoomLevel = computeZoom(cluster.getBounds(), self.map.getDiv());
   zoomLevel += zoomLevel === self.map.get('camera_zoom') ? 1 : 0;
   self.map.animateCamera({
-    target: [
-      bounds.southwest,
-      {
-        lat: bounds.northeast.lat,
-        lng: bounds.southwest.lng
-      },
-      bounds.northeast,
-      {
-        lat: bounds.southwest.lat,
-        lng: bounds.northeast.lng
-      }
-    ],
+    target: cluster.getBounds().getCenter(),
+    zoom: zoomLevel,
     duration: 500
   }, function () {
     if (self.boundsDraw) {
@@ -373,7 +318,7 @@ MarkerCluster.prototype.remove = function (callback) {
     self.exec.call(self,
       resolve.bind(self),
       reject.bind(self),
-      'PluginMarkerCluster', 'remove', [self.map.getId(), self.getId()], {
+      self.getPluginName(), 'remove', [self.getId()], {
         sync: true,
         remove: true
       });
@@ -388,16 +333,11 @@ MarkerCluster.prototype.remove = function (callback) {
 
   keys = Object.keys(self._markerMap);
   keys.forEach(function (markerId) {
-    try {
-      self._markerMap[markerId].remove();
-    } catch(e) {
-      // ignore
-    }
-  });
-  keys.forEach(function (markerId) {
-    self._markerMap[markerId].destroy();
-    self._markerMap[markerId] = undefined;
-    delete self._markerMap[markerId];
+    self._markerMap[markerId].remove(function() {
+      self._markerMap[markerId].destroy();
+      self._markerMap[markerId] = undefined;
+      delete self._markerMap[markerId];
+    });
   });
   if (self.boundsDraw && self.get('polygon')) {
     self.get('polygon').remove();
@@ -439,7 +379,7 @@ Object.defineProperty(MarkerCluster.prototype, '_removeMarkerById', {
     marker.destroy();
     delete self._markerMap[markerId];
     if (isAdded) {
-      self.exec.call(self, null, null, 'PluginMarkerCluster', 'redrawClusters', [self.map.getId(), self.getId(), {
+      self.exec.call(self, null, null, self.getPluginName(), 'redrawClusters', [self.getId(), {
         'delete': [markerId]
       }], {
         sync: true
@@ -1132,26 +1072,19 @@ Object.defineProperty(MarkerCluster.prototype, '_redraw', {
         if (typeof marker.get('icon') === 'string') {
           marker.set('icon', {
             'url': marker.get('icon'),
-            'size': {
-              'width': Math.floor(size.width),
-              'height': Math.floor(size.height)
-            },
+            'size': size,
             'anchor': [size.width / 2, size.height]
           }, true);
         } else {
           var icon = marker.get('icon') || {};
           icon.size = icon.size || size;
-          icon.size = {
-            'width': Math.floor(icon.size.width),
-            'height': Math.floor(icon.size.height)
-          };
           icon.anchor = icon.anchor || [size.width / 2, size.height];
           self._markerMap[markerId].set('icon', icon, true);
         }
         marker.set('infoWindowAnchor', marker.get('infoWindowAnchor') || [marker.get('icon').size.width / 2, 0], true);
       });
       self.trigger('nextTask');
-    }, self.errorHandler, 'PluginMarkerCluster', 'redrawClusters', [self.map.getId(), self.getId(), {
+    }, self.errorHandler, self.getPluginName(), 'redrawClusters', [self.getId(), {
       'resolution': resolution,
       'new_or_update': new_or_update_clusters,
       'delete': delete_clusters
@@ -1197,7 +1130,7 @@ MarkerCluster.prototype._createMarker = function (markerOpts) {
   var self = this;
   var markerId = self.getId() + '-marker_' + Math.floor(Date.now() * Math.random());
   var marker = new Marker(self.getMap(), markerOpts, exec, {
-    type: 'MarkerCluster',
+    className: 'MarkerCluster',
     __pgmId: markerId
   });
   marker._privateInitialize(markerOpts);

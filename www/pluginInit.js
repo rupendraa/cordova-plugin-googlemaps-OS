@@ -1,5 +1,5 @@
 var cordova_exec = require('cordova/exec'),
-  common = require('cordova-plugin-googlemaps-beta.Common');
+  common = require('cordova-plugin-googlemaps.Common');
 
 function pluginInit() {
   //-------------------------------------------------------------
@@ -90,15 +90,14 @@ function pluginInit() {
   var cssAdjuster = document.createElement('style');
   cssAdjuster.setAttribute('type', 'text/css');
   cssAdjuster.innerText = [
-    '._gmaps_cdv_ {',
-    '   background-image: none !important;',
-    '   background: rgba(0,0,0,0) none !important;',
+    'html, body, ._gmaps_cdv_ {',
+    '   background-image: url() !important;',
+    '   background: rgba(0,0,0,0) url() !important;',
     '   background-color: rgba(0,0,0,0) !important;',
-    '   --pgm-background-color: transparent !important;',
     '}',
     '._gmaps_cdv_ .nav-decor {',
     '   background-color: rgba(0,0,0,0) !important;',
-    '   background: rgba(0,0,0,0) none !important;',
+    '   background: rgba(0,0,0,0) !important;',
     '   display:none !important;',
     '}',
     '.framework7-root .page-previous {',

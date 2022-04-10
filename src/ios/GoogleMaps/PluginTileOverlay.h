@@ -9,7 +9,6 @@
 #import "CordovaGoogleMaps.h"
 #import "IPluginProtocol.h"
 #import "PluginTileProvider.h"
-#import <WebKit/WKWebView.h>
 
 @interface PluginTileOverlay : CDVPlugin<IPluginProtocol>
 @property (nonatomic, strong) PluginMapViewController* mapCtrl;

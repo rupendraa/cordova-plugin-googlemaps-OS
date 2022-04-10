@@ -1,4 +1,5 @@
 
+
 var utils = require('cordova/utils'),
   cordova_exec = require('cordova/exec'),
   common = require('./Common'),
@@ -6,7 +7,6 @@ var utils = require('cordova/utils'),
   BaseClass = require('./BaseClass'),
   BaseArrayClass = require('./BaseArrayClass'),
   LatLng = require('./LatLng'),
-  LatLngBounds = require('./LatLngBounds'),
   MapTypeId = require('./MapTypeId'),
   event = require('./event'),
   VisibleRegion = require('./VisibleRegion'),
@@ -18,23 +18,12 @@ var utils = require('cordova/utils'),
   GroundOverlay = require('./GroundOverlay'),
   KmlOverlay = require('./KmlOverlay'),
   KmlLoader = require('./KmlLoader'),
-  DirectionsRenderer = require('./DirectionsRenderer'),
-  spherical = require('./spherical'),
-  encoding = require('./encoding'),
   MarkerCluster = require('./MarkerCluster');
 
 /**
  * Google Maps model.
  */
 var exec;
-var _protect = function(listener) {
-  Object.defineProperty(listener, '_protect', {
-    enumerable: false,
-    value: true,
-    writable: false
-  });
-  return listener;
-}
 var Map = function(__pgmId, _exec) {
   var self = this;
   exec = _exec;
@@ -59,21 +48,6 @@ var Map = function(__pgmId, _exec) {
   infoWindowLayer.style.overflow = 'visible';
   infoWindowLayer.style['z-index'] = 1;
 
-  var style = document.createElement('style');
-  style.setAttribute('type', 'text/css');
-  style.innerHTML = [
-    '.pgm-html-info-frame > * {',
-      'margin: 0;',
-      'padding: 0;',
-      'border: 0;',
-      'font-size: 100%;',
-      'font: inherit;',
-      'vertical-align: baseline;',
-      'color: black;',
-    '}'
-  ].join("\n");
-  infoWindowLayer.appendChild(style);
-
   Object.defineProperty(self, '_layers', {
     value: {
       info: infoWindowLayer
@@ -82,17 +56,17 @@ var Map = function(__pgmId, _exec) {
     writable: false
   });
 
-  self.on(event.MAP_CLICK, _protect(function() {
+  self.on(event.MAP_CLICK, function() {
     self.set('active_marker', undefined);
-  }));
+  });
 
-  self.on('active_marker_changed', _protect(function(prevMarker, newMarker) {
+  self.on('active_marker_changed', function(prevMarker, newMarker) {
     var newMarkerId = newMarker ? newMarker.getId() : null;
     if (prevMarker) {
       prevMarker.hideInfoWindow.call(prevMarker);
     }
-    self.exec.call(self, null, null, 'PluginMap', 'setActiveMarkerId', [self.__pgmId, newMarkerId]);
-  }));
+    self.exec.call(self, null, null, self.__pgmId, 'setActiveMarkerId', [newMarkerId]);
+  });
 };
 
 utils.extend(Map, Overlay);
@@ -103,13 +77,11 @@ utils.extend(Map, Overlay);
 Map.prototype.refreshLayout = function() {
   // Webkit redraw mandatory
   // http://stackoverflow.com/a/3485654/697856
-  // document.body.style.display = 'inline-block';
-  // document.body.offsetHeight;
-  // document.body.style.display = '';
-  document.body.style.transform = 'rotateZ(0deg)';
+  document.body.style.display = 'inline-block';
+  document.body.offsetHeight;
+  document.body.style.display = '';
 
-  var self = this;
-  self.exec.call(self, null, null, 'CordovaGoogleMaps', 'resizeMap', [self.__pgmId]);
+  this.exec.call(this, null, null, this.__pgmId, 'resizeMap', []);
 };
 
 Map.prototype.getMap = function(meta, div, options) {
@@ -125,53 +97,12 @@ Map.prototype.getMap = function(meta, div, options) {
     this.set('myLocationButton', options.controls.myLocationButton === true);
   }
 
-  if (options.preferences && options.preferences.restriction) {
-
-    var bounds = new LatLngBounds();
-    if (utils.isArray(options.preferences.restriction)) {
-      options.preferences.restriction.forEach(function(ele) {
-        if (ele.lat && ele.lng) {
-          bounds.extend(ele);
-        }
-      });
-    } else if (options.preferences.restriction.type === 'LatLngBounds' ||
-      options.preferences.restriction.northeast && options.preferences.restriction.southwest) {
-      bounds.extend(options.preferences.restriction.southwest);
-      bounds.extend(options.preferences.restriction.northeast);
-    }
-
-    if (!bounds.southwest || !bounds.northeast) {
-      console.warn('(getMap) options.preferences.restriction is invalid.');
-      delete options.preferences.restriction;
-    } else {
-      var minZoom = !div ? 0 : spherical.computeBoundsZoom(bounds, div.offsetWidth, div.offsetHeight, 256);
-      var maxZoom = 23;
-      var prefMinZoom = 0;
-      var prefMaxZoom = 23;
-      if (options.preferences.zoom) {
-        if (options.preferences.zoom.minZoom) {
-          minZoom = options.preferences.zoom.minZoom;
-          prefMinZoom = minZoom;
-        }
-        if (options.preferences.zoom.maxZoom) {
-          maxZoom = options.preferences.zoom.maxZoom;
-          maxZoom = minZoom;
-        }
-      }
-      options.preferences.restriction = {
-        'south': bounds.southwest.lat,
-        'west': bounds.southwest.lng,
-        'north': bounds.northeast.lat,
-        'east': bounds.northeast.lng,
-        'prefMinZoom': prefMinZoom,
-        'prefMaxZoom': prefMaxZoom,
-        'minZoom': minZoom,
-        'maxZoom': maxZoom
-      };
-      self.set('restriction', options.preferences.restriction);
+  if (options.preferences && options.preferences.gestureBounds) {
+    if (utils.isArray(options.preferences.gestureBounds) ||
+        options.preferences.gestureBounds.type === 'LatLngBounds') {
+      options.preferences.gestureBounds = common.convertToPositionArray(options.preferences.gestureBounds);
     }
   }
-
 
   if (!common.isDom(div)) {
     self.set('visible', false);
@@ -253,6 +184,9 @@ Map.prototype.getMap = function(meta, div, options) {
     _isReady: true
   }, function() {
 
+    //------------------------------------------------------------------------
+    // Clear background colors of map div parents after the map is created
+    //------------------------------------------------------------------------
     var div = self.get('div');
     if (common.isDom(div)) {
 
@@ -274,6 +208,14 @@ Map.prototype.getMap = function(meta, div, options) {
       div.insertBefore(self._layers.info, div.firstChild);
 
 
+      while (div.parentNode) {
+        div.style.backgroundColor = 'rgba(0,0,0,0) !important';
+
+        // Add _gmaps_cdv_ class
+        common.attachTransparentClass(div);
+
+        div = div.parentNode;
+      }
     }
     cordova.fireDocumentEvent('plugin_touch', {
       force: true
@@ -308,83 +250,57 @@ Map.prototype.getMap = function(meta, div, options) {
 Map.prototype.setOptions = function(options) {
   options = options || {};
 
-  var self = this;
-  var div = self.get('div');
   if (options.controls) {
-    self.set('myLocation', options.controls.myLocation === true);
-    self.set('myLocationButton', options.controls.myLocationButton === true);
+    var myLocation = this.get('myLocation');
+    if ('myLocation' in options.controls) {
+      myLocation = options.controls.myLocation === true;
+    }
+    var myLocationButton = this.get('myLocationButton');
+    if ('myLocationButton' in options.controls) {
+      myLocationButton = options.controls.myLocationButton === true;
+    }
+    this.set('myLocation', myLocation);
+    this.set('myLocationButton', myLocationButton);
+    if (myLocation === true || myLocation === false) {
+      options.controls.myLocation = myLocation;
+    }
+    if (myLocationButton === true || myLocationButton === false) {
+      options.controls.myLocationButton = myLocationButton;
+    }
   }
-
-  // if (options.camera && utils.isArray(options.camera.target)) {
-  //   var cameraBounds = new LatLngBounds();
-  //   options.camera.target.forEach(function(ele) {
-  //     if (ele.lat && ele.lng) {
-  //       cameraBounds.extend(ele);
-  //     }
-  //   });
-  //   options.camera.target = cameraBounds.getCenter();
-  //   options.camera.zoom = spherical.computeBoundsZoom(cameraBounds, div.offsetWidth, div.offsetHeight, 256);
-  // }
-  if (options.preferences) {
-    if (options.preferences.restriction) {
-
-      var bounds = new LatLngBounds();
-      if (utils.isArray(options.preferences.restriction)) {
-        options.preferences.restriction.forEach(function(ele) {
-          if (ele.lat && ele.lng) {
-            bounds.extend(ele);
-          }
-        });
-      } else if (options.preferences.restriction.type === 'LatLngBounds' ||
-        options.preferences.restriction.northeast && options.preferences.restriction.southwest) {
-        bounds.extend(options.preferences.restriction.southwest);
-        bounds.extend(options.preferences.restriction.northeast);
-      }
-
-      if (!bounds.southwest || !bounds.northeast) {
-        console.warn('(setOptions) options.preferences.restriction is invalid.');
-        delete options.preferences.restriction;
-      } else {
-        var minZoom = !div ? 0 : spherical.computeBoundsZoom(bounds, div.offsetWidth, div.offsetHeight, 256);
-        var maxZoom = 23;
-        var prefMinZoom = 0;
-        var prefMaxZoom = 23;
-        if (options.preferences.zoom) {
-          if (options.preferences.zoom.minZoom) {
-            minZoom = options.preferences.zoom.minZoom;
-            prefMinZoom = minZoom;
-          }
-          if (options.preferences.zoom.maxZoom) {
-            maxZoom = options.preferences.zoom.maxZoom;
-            maxZoom = minZoom;
-          }
-        }
-        options.preferences.restriction = {
-          'south': bounds.southwest.lat,
-          'west': bounds.southwest.lng,
-          'north': bounds.northeast.lat,
-          'east': bounds.northeast.lng,
-          'prefMinZoom': prefMinZoom,
-          'prefMaxZoom': prefMaxZoom,
-          'minZoom': minZoom,
-          'maxZoom': maxZoom
-        };
-        self.set('restriction', options.preferences.restriction);
-      }
-    } else {
-      self.set('restriction', undefined);
+  if (options.camera) {
+    if (options.camera.latLng) {
+      options.camera.target = options.camera.latLng;
+      delete options.camera.latLng;
+    }
+    this.set('camera', options.camera);
+    if (options.camera.target) {
+      this.set('camera_target', options.camera.target);
+    }
+    if (options.camera.bearing) {
+      this.set('camera_bearing', options.camera.bearing);
+    }
+    if (options.camera.zoom) {
+      this.set('camera_zoom', options.camera.zoom);
+    }
+    if (options.camera.tilt) {
+      this.set('camera_tilt', options.camera.tilt);
     }
   }
 
+  if (options.preferences && options.preferences.gestureBounds) {
+    if (utils.isArray(options.preferences.gestureBounds) ||
+        options.preferences.gestureBounds.type === 'LatLngBounds') {
+      options.preferences.gestureBounds = common.convertToPositionArray(options.preferences.gestureBounds);
+    }
+  }
 
   if (utils.isArray(options.styles)) {
     options.styles = JSON.stringify(options.styles);
   }
-  return (new Promise(function(resolve, reject) {
-    self.exec.call(self, resolve, reject, 'PluginMap', 'setOptions', [self.__pgmId, options]);
-  }));
+  this.exec.call(this, null, this.errorHandler, this.__pgmId, 'setOptions', [options]);
+  return this;
 };
-
 
 Map.prototype.getMyLocation = function(params, success_callback, error_callback) {
   return window.plugin.google.maps.LocationService.getMyLocation.call(this, params, success_callback, error_callback);
@@ -392,16 +308,13 @@ Map.prototype.getMyLocation = function(params, success_callback, error_callback)
 
 Map.prototype.setCameraTarget = function(latLng) {
   this.set('camera_target', latLng);
-  this.exec.call(this, null, this.errorHandler, 'PluginMap', 'setCameraTarget', [this.__pgmId, {
-    'lat': latLng.lat,
-    'lng': latLng.lng
-  }]);
+  this.exec.call(this, null, this.errorHandler, this.__pgmId, 'setCameraTarget', [latLng.lat, latLng.lng]);
   return this;
 };
 
 Map.prototype.setCameraZoom = function(zoom) {
   this.set('camera_zoom', zoom);
-  this.exec.call(this, null, this.errorHandler, 'PluginMap', 'setCameraZoom', [this.__pgmId, zoom], {
+  this.exec.call(this, null, this.errorHandler, this.__pgmId, 'setCameraZoom', [zoom], {
     sync: true
   });
   return this;
@@ -409,10 +322,7 @@ Map.prototype.setCameraZoom = function(zoom) {
 Map.prototype.panBy = function(x, y) {
   x = parseInt(x, 10);
   y = parseInt(y, 10);
-  this.exec.call(this, null, this.errorHandler, 'PluginMap', 'panBy', [this.__pgmId, {
-    'x': x,
-    'y': y
-  }], {
+  this.exec.call(this, null, this.errorHandler, this.__pgmId, 'panBy', [x, y], {
     sync: true
   });
   return this;
@@ -460,7 +370,7 @@ Map.prototype.clear = function(callback) {
     self.exec.call(self,
       resolve.bind(self),
       reject.bind(self),
-      'PluginMap', 'clear', [self.__pgmId], {
+      self.__pgmId, 'clear', [], {
         sync: true
       });
   };
@@ -487,7 +397,7 @@ Map.prototype.setMapTypeId = function(mapTypeId) {
     return this.errorHandler('Invalid MapTypeId was specified.');
   }
   this.set('mapTypeId', mapTypeId);
-  this.exec.call(this, null, this.errorHandler, 'PluginMap', 'setMapTypeId', [this.__pgmId, mapTypeId]);
+  this.exec.call(this, null, this.errorHandler, this.__pgmId, 'setMapTypeId', [mapTypeId]);
   return this;
 };
 
@@ -497,7 +407,7 @@ Map.prototype.setMapTypeId = function(mapTypeId) {
  */
 Map.prototype.setCameraTilt = function(tilt) {
   this.set('camera_tilt', tilt);
-  this.exec.call(this, null, this.errorHandler, 'PluginMap', 'setCameraTilt', [this.__pgmId, tilt], {
+  this.exec.call(this, null, this.errorHandler, this.__pgmId, 'setCameraTilt', [tilt], {
     sync: true
   });
   return this;
@@ -509,7 +419,7 @@ Map.prototype.setCameraTilt = function(tilt) {
  */
 Map.prototype.setCameraBearing = function(bearing) {
   this.set('camera_bearing', bearing);
-  this.exec.call(this, null, this.errorHandler, 'PluginMap', 'setCameraBearing', [this.__pgmId, bearing], {
+  this.exec.call(this, null, this.errorHandler, this.__pgmId, 'setCameraBearing', [bearing], {
     sync: true
   });
   return this;
@@ -571,17 +481,11 @@ Map.prototype.animateCamera = function(cameraPosition, callback) {
       return Promise.reject(error);
     }
   }
-  if ('heading' in cameraPosition) {
-    cameraPosition.heading = cameraPosition.heading % 360;
-  }
-  if ('tilt' in cameraPosition) {
-    cameraPosition.tilt = Math.min(Math.max(0, cameraPosition.tilt), 90);
-  }
   // if (!('padding' in cameraPosition)) {
   //   cameraPosition.padding = 10;
   // }
 
-  if (utils.isArray(target) || target.type === 'LatLngBounds' || target.southwest && target.northeast) {
+  if (utils.isArray(target) || target.type === 'LatLngBounds') {
     target = common.convertToPositionArray(target);
     if (target.length === 0) {
       // skip if no point is specified
@@ -600,9 +504,7 @@ Map.prototype.animateCamera = function(cameraPosition, callback) {
     self.exec.call(self,
       resolve.bind(self),
       reject.bind(self),
-      'PluginMap',
-      'animateCamera',
-      [self.__pgmId, cameraPosition], {
+      self.__pgmId, 'animateCamera', [cameraPosition], {
         sync: true
       });
   };
@@ -653,9 +555,7 @@ Map.prototype.moveCamera = function(cameraPosition, callback) {
     self.exec.call(self,
       resolve.bind(self),
       reject.bind(self),
-      'PluginMap',
-      'moveCamera',
-      [self.__pgmId, cameraPosition], {
+      self.__pgmId, 'moveCamera', [cameraPosition], {
         sync: true
       });
   };
@@ -671,52 +571,42 @@ Map.prototype.setMyLocationButtonEnabled = function(enabled) {
   var self = this;
   enabled = common.parseBoolean(enabled);
   this.set('myLocationButton', enabled);
-  self.exec.call(self, null, self.errorHandler,
-    'PluginMap',
-    'setMyLocationEnabled',
-    [
-      self.__pgmId,
-      {
-        myLocationButton: enabled,
-        myLocation: self.get('myLocation') === true
-      }], {
-      sync: true
-    });
+  self.exec.call(self, null, this.errorHandler, this.__pgmId, 'setMyLocationEnabled', [{
+    myLocationButton: enabled,
+    myLocation: self.get('myLocation') === true
+  }], {
+    sync: true
+  });
   return this;
 };
 
 Map.prototype.setMyLocationEnabled = function(enabled) {
   var self = this;
   enabled = common.parseBoolean(enabled);
-  self.set('myLocation', enabled);
-  self.exec.call(self, null, self.errorHandler,
-    'PluginMap',
-    'setMyLocationEnabled',
-    [
-      self.__pgmId,
-      {
-        myLocationButton: self.get('myLocationButton') === true,
-        myLocation: enabled
-      }], {
-        sync: true
-      });
+  this.set('myLocation', enabled);
+  self.exec.call(self, null, this.errorHandler, this.__pgmId, 'setMyLocationEnabled', [{
+    myLocationButton: self.get('myLocationButton') === true,
+    myLocation: enabled
+  }], {
+    sync: true
+  });
   return this;
 };
 
 Map.prototype.setIndoorEnabled = function(enabled) {
   enabled = common.parseBoolean(enabled);
-  this.exec.call(this, null, this.errorHandler, 'PluginMap', 'setIndoorEnabled', [this.__pgmId, enabled]);
+  this.exec.call(this, null, this.errorHandler, this.__pgmId, 'setIndoorEnabled', [enabled]);
   return this;
 };
 Map.prototype.setTrafficEnabled = function(enabled) {
   enabled = common.parseBoolean(enabled);
-  this.exec.call(this, null, this.errorHandler, 'PluginMap', 'setTrafficEnabled', [this.__pgmId, enabled]);
+  this.exec.call(this, null, this.errorHandler, this.__pgmId, 'setTrafficEnabled', [enabled]);
   return this;
 };
 Map.prototype.setCompassEnabled = function(enabled) {
   var self = this;
   enabled = common.parseBoolean(enabled);
-  self.exec.call(self, null, self.errorHandler, 'PluginMap', 'setCompassEnabled', [this.__pgmId, enabled]);
+  self.exec.call(self, null, self.errorHandler, this.__pgmId, 'setCompassEnabled', [enabled]);
   return this;
 };
 Map.prototype.getFocusedBuilding = function(callback) {
@@ -725,7 +615,7 @@ Map.prototype.getFocusedBuilding = function(callback) {
     self.exec.call(self,
       resolve.bind(self),
       reject.bind(self),
-      'PluginMap', 'getFocusedBuilding', [self.__pgmId]);
+      self.__pgmId, 'getFocusedBuilding', []);
   };
 
   if (typeof callback === 'function') {
@@ -742,7 +632,7 @@ Map.prototype.setVisible = function(isVisible) {
   var self = this;
   isVisible = common.parseBoolean(isVisible);
   self.set('visible', isVisible);
-  self.exec.call(self, null, self.errorHandler, 'PluginMap', 'setVisible', [self.__pgmId, isVisible]);
+  self.exec.call(self, null, self.errorHandler, this.__pgmId, 'setVisible', [isVisible]);
   return this;
 };
 
@@ -751,7 +641,7 @@ Map.prototype.setClickable = function(isClickable) {
   var self = this;
   isClickable = common.parseBoolean(isClickable);
   self.set('clickable', isClickable);
-  self.exec.call(self, null, self.errorHandler, 'PluginMap', 'setClickable', [self.__pgmId, isClickable]);
+  self.exec.call(self, null, self.errorHandler, this.__pgmId, 'setClickable', [isClickable]);
   return this;
 };
 Map.prototype.getClickable = function() {
@@ -765,7 +655,7 @@ Map.prototype.getClickable = function() {
 Map.prototype.setAllGesturesEnabled = function(enabled) {
   var self = this;
   enabled = common.parseBoolean(enabled);
-  self.exec.call(self, null, self.errorHandler, 'PluginMap', 'setAllGesturesEnabled', [self.__pgmId, enabled]);
+  self.exec.call(self, null, self.errorHandler, this.__pgmId, 'setAllGesturesEnabled', [enabled]);
   return this;
 };
 
@@ -775,17 +665,6 @@ Map.prototype.setAllGesturesEnabled = function(enabled) {
  */
 Map.prototype.getCameraPosition = function() {
   return this.get('camera');
-};
-
-/**
- * Cancel the camera animation
- * @return {CameraPosition}
- */
-Map.prototype.stopAnimation = function() {
-  var self = this;
-  if (self._isReady) {
-    cordova_exec(null, null, 'PluginMap', 'stopAnimation', [self.__pgmId]);
-  }
 };
 
 /**
@@ -800,27 +679,8 @@ Map.prototype.remove = function(callback) {
     value: true,
     writable: false
   });
-  self.stopAnimation();
-  self.set('div', null);
 
   self.trigger('remove');
-  // var div = self.get('div');
-  // if (div) {
-  //   while (div) {
-  //     if (div.style) {
-  //       div.style.backgroundColor = '';
-  //     }
-  //     if (div.classList) {
-  //       div.classList.remove('_gmaps_cdv_');
-  //     } else if (div.className) {
-  //       div.className = div.className.replace(/_gmaps_cdv_/g, '');
-  //       div.className = div.className.replace(/\s+/g, ' ');
-  //     }
-  //     div = div.parentNode;
-  //   }
-  // }
-  // self.set('div', undefined);
-
 
   // Close the active infoWindow
   var active_marker = self.get('active_marker');
@@ -884,7 +744,7 @@ Map.prototype.toDataURL = function(params, callback) {
     self.exec.call(self,
       resolve.bind(self),
       reject.bind(self),
-      'PluginMap', 'toDataURL', [self.__pgmId, params]);
+      self.__pgmId, 'toDataURL', [params]);
   };
 
   if (typeof callback === 'function') {
@@ -908,22 +768,14 @@ Map.prototype.setDiv = function(div) {
   var self = this,
     args = [];
 
-  var prevDiv = self.get('div');
-  if (common.isDom(prevDiv)) {
-    prevDiv.__pluginMapId = undefined;
-  }
-
-  if (common.isDom(div)) {
-    var elemId = common.getPluginDomId(div);
-    args.push(elemId);
-
-    if (!div.__pluginMapId) {
-      Object.defineProperty(div, '__pluginMapId', {
-        enumerable: false,
-        writable: true,
-        value: self.__pgmId
-      });
+  if (!common.isDom(div)) {
+    div = self.get('div');
+    if (common.isDom(div)) {
+      div.removeAttribute('__pluginMapId');
     }
+    self.set('div', null);
+  } else {
+    div.setAttribute('__pluginMapId', self.__pgmId);
 
     // Insert the infoWindow layer
     if (self._layers.info.parentNode) {
@@ -942,31 +794,40 @@ Map.prototype.setDiv = function(div) {
     }
     div.insertBefore(self._layers.info, div.firstChild);
 
-    // Webkit redraw mandatory
-    // http://stackoverflow.com/a/3485654/697856
-    // div.style.display = 'none';
-    // div.offsetHeight;
-    // div.style.display = '';
     document.body.style.transform = 'rotateZ(0deg)';
-    div.style.overflow = 'hidden';
-    div.style.position = 'relative';
 
+    self.set('div', div);
+
+    if (cordova.platform === 'browser') {
+      return;
+    }
+
+
+    positionCSS = common.getStyle(div, 'position');
+    if (!positionCSS || positionCSS === 'static') {
+      div.style.position = 'relative';
+    }
+    var elemId = common.getPluginDomId(div);
+    args.push(elemId);
+    while (div.parentNode) {
+      div.style.backgroundColor = 'rgba(0,0,0,0)';
+
+      // Add _gmaps_cdv_ class
+      common.attachTransparentClass(div);
+
+      div = div.parentNode;
+    }
   }
-  self.set('div', div);
-  args.unshift(self.__pgmId);
-
-  return (new Promise(function(resolve) {
-    self.exec.call(self, function() {
-      cordova.fireDocumentEvent('plugin_touch', {
-        force: true,
-        action: 'setDiv'
-      });
-      self.refreshLayout();
-      resolve();
-    }, self.errorHandler, 'CordovaGoogleMaps', 'setDiv', args, {
-      sync: true
+  self.exec.call(self, function() {
+    cordova.fireDocumentEvent('plugin_touch', {
+      force: true,
+      action: 'setDiv'
     });
-  }));
+    self.refreshLayout();
+  }, self.errorHandler, self.__pgmId, 'setDiv', args, {
+    sync: true
+  });
+  return self;
 };
 
 /**
@@ -1007,12 +868,7 @@ Map.prototype.fromLatLngToPoint = function(latLng, callback) {
       self.exec.call(self,
         resolve.bind(self),
         reject.bind(self),
-        'PluginMap',
-        'fromLatLngToPoint',
-        [self.__pgmId, {
-          'lat': latLng.lat,
-          'lng': latLng.lng
-        }]);
+        self.__pgmId, 'fromLatLngToPoint', [latLng.lat, latLng.lng]);
     };
 
     if (typeof callback === 'function') {
@@ -1050,11 +906,7 @@ Map.prototype.fromPointToLatLng = function(pixel, callback) {
           resolve.call(self, latLng);
         },
         reject.bind(self),
-        'PluginMap', 'fromPointToLatLng', [self.__pgmId,
-          {
-            'x': pixel[0],
-            'y': pixel[1]
-          }]);
+        self.__pgmId, 'fromPointToLatLng', [pixel[0], pixel[1]]);
     };
 
     if (typeof callback === 'function') {
@@ -1111,8 +963,7 @@ Map.prototype.setPadding = function(p1, p2, p3, p4) {
     padding.left = padding.top;
     break;
   }
-  this.exec.call(this, null, self.errorHandler,
-    'PluginMap', 'setPadding', [this.__pgmId, padding]);
+  this.exec.call(this, null, self.errorHandler, this.__pgmId, 'setPadding', [padding]);
   return this;
 };
 
@@ -1177,26 +1028,6 @@ Map.prototype.addKmlOverlay = function(kmlOverlayOptions, callback) {
 };
 
 
-Map.prototype.addDirectionsRenderer = function(directionsRendererOptions) {
-  var self = this;
-  directionsRendererOptions = directionsRendererOptions || {};
-
-  if (directionsRendererOptions.directions) {
-
-    var renderer = new DirectionsRenderer(self, self.exec, directionsRendererOptions);
-    renderer.setRouteIndex(0);
-
-    return renderer;
-  } else {
-
-    if (typeof callback === 'function') {
-      throw new Error('directionsRendererOptions.directions is required.');
-    } else {
-      return Promise.reject('directionsRendererOptions.directions is required.');
-    }
-  }
-};
-
 //-------------
 // Ground overlay
 //-------------
@@ -1211,14 +1042,6 @@ Map.prototype.addGroundOverlay = function(groundOverlayOptions, callback) {
   groundOverlayOptions.zIndex = groundOverlayOptions.zIndex || 0;
   groundOverlayOptions.bounds = common.convertToPositionArray(groundOverlayOptions.bounds);
   groundOverlayOptions.noCaching = true;
-
-  if (groundOverlayOptions.url && groundOverlayOptions.url.indexOf("://") === -1) {
-
-    var link = document.createElement('a');
-    link.href = groundOverlayOptions.url;
-    groundOverlayOptions.url = link.protocol+'//'+link.host+link.pathname + link.search;
-    link = undefined;
-  }
 
   var groundOverlay = new GroundOverlay(self, groundOverlayOptions, exec);
   var groundOverlayId = groundOverlay.getId();
@@ -1235,7 +1058,7 @@ Map.prototype.addGroundOverlay = function(groundOverlayOptions, callback) {
     if (typeof callback === 'function') {
       callback.call(self, groundOverlay);
     }
-  }, self.errorHandler, 'PluginMap', 'loadPlugin', [self.__pgmId, 'GroundOverlay', groundOverlayOptions, groundOverlay.hashCode]);
+  }, self.errorHandler, self.__pgmId, 'loadPlugin', ['GroundOverlay', groundOverlayOptions, groundOverlay.hashCode]);
 
   return groundOverlay;
 };
@@ -1287,8 +1110,6 @@ Map.prototype.addTileOverlay = function(tilelayerOptions, callback) {
     debug: tilelayerOptions.debug
   };
 
-  var tileOverlayId = "tileoverlay_" + hashCode;
-  var link = document.createElement('a');
   var onNativeCallback = function(params) {
     var url = tilelayerOptions.getTile(params.x, params.y, params.zoom);
     if (!url || url === '(null)' || url === 'undefined' || url === 'null') {
@@ -1297,21 +1118,13 @@ Map.prototype.addTileOverlay = function(tilelayerOptions, callback) {
     if (url instanceof Promise) {
       common.promiseTimeout(5000, url)
         .then(function(finalUrl) {
-
-          var link = document.createElement('a');
-          link.href = finalUrl;
-          finalUrl = link.protocol+'//'+link.host+link.pathname + link.search;
-
-          cordova_exec(null, self.errorHandler, 'PluginTileOverlay', 'onGetTileUrlFromJS', [self.map.getId(), tileOverlayId, params.key, finalUrl]);
+          cordova_exec(null, self.errorHandler, self.__pgmId + '-tileoverlay', 'onGetTileUrlFromJS', [hashCode, params.key, finalUrl]);
         })
         .catch(function() {
-          cordova_exec(null, self.errorHandler, 'PluginTileOverlay', 'onGetTileUrlFromJS', [self.map.getId(), tileOverlayId, params.key, '(null)']);
+          cordova_exec(null, self.errorHandler, self.__pgmId + '-tileoverlay', 'onGetTileUrlFromJS', [hashCode, params.key, '(null)']);
         });
     } else {
-
-      link.href = url;
-      url = link.protocol+'//'+link.host+link.pathname + link.search;
-      cordova_exec(null, self.errorHandler, 'PluginTileOverlay', 'onGetTileUrlFromJS', [self.map.getId(), tileOverlayId, params.key, url]);
+      cordova_exec(null, self.errorHandler, self.__pgmId + '-tileoverlay', 'onGetTileUrlFromJS', [hashCode, params.key, url]);
     }
   };
   document.addEventListener(self.__pgmId + '-' + hashCode + '-tileoverlay', onNativeCallback);
@@ -1323,11 +1136,10 @@ Map.prototype.addTileOverlay = function(tilelayerOptions, callback) {
     if (typeof callback === 'function') {
       callback.call(self, tileOverlay);
     }
-  }, self.errorHandler, 'PluginMap', 'loadPlugin', [self.__pgmId, 'TileOverlay', options, hashCode]);
+  }, self.errorHandler, self.__pgmId, 'loadPlugin', ['TileOverlay', options, hashCode]);
 
   return tileOverlay;
 };
-
 
 //-------------
 // Polygon
@@ -1335,9 +1147,6 @@ Map.prototype.addTileOverlay = function(tilelayerOptions, callback) {
 Map.prototype.addPolygon = function(polygonOptions, callback) {
   var self = this;
   polygonOptions.points = polygonOptions.points || [];
-  if (typeof polygonOptions.points === 'string') {
-    polygonOptions.points = encoding.decodePath(polygonOptions.points);
-  }
   var _orgs = polygonOptions.points;
   polygonOptions.points = common.convertToPositionArray(polygonOptions.points);
   polygonOptions.holes = polygonOptions.holes || [];
@@ -1385,7 +1194,7 @@ Map.prototype.addPolygon = function(polygonOptions, callback) {
     if (typeof callback === 'function') {
       callback.call(self, polygon);
     }
-  }, self.errorHandler, 'PluginMap', 'loadPlugin', [self.__pgmId, 'Polygon', opts, polygon.hashCode]);
+  }, self.errorHandler, self.__pgmId, 'loadPlugin', ['Polygon', opts, polygon.hashCode]);
 
   return polygon;
 };
@@ -1396,9 +1205,6 @@ Map.prototype.addPolygon = function(polygonOptions, callback) {
 Map.prototype.addPolyline = function(polylineOptions, callback) {
   var self = this;
   polylineOptions.points = polylineOptions.points || [];
-  if (typeof polylineOptions.points === 'string') {
-    polylineOptions.points = encoding.decodePath(polylineOptions.points);
-  }
   var _orgs = polylineOptions.points;
   polylineOptions.points = common.convertToPositionArray(polylineOptions.points);
   polylineOptions.color = common.HTMLColor2RGBA(polylineOptions.color || '#FF000080', 0.75);
@@ -1429,7 +1235,7 @@ Map.prototype.addPolyline = function(polylineOptions, callback) {
         callback.call(self, polyline);
       }
     }
-  }, self.errorHandler, 'PluginMap', 'loadPlugin', [self.__pgmId, 'Polyline', opts, polyline.hashCode]);
+  }, self.errorHandler, self.__pgmId, 'loadPlugin', ['Polyline', opts, polyline.hashCode]);
 
   return polyline;
 };
@@ -1459,13 +1265,14 @@ Map.prototype.addCircle = function(circleOptions, callback) {
   });
 
   self.exec.call(self, function() {
-    circle._privateInitialize();
-    delete circle._privateInitialize;
-
-    if (typeof callback === 'function') {
-      callback.call(self, circle);
+    if (circle) {
+      circle._privateInitialize();
+      delete circle._privateInitialize;
+      if (typeof callback === 'function') {
+        callback.call(self, circle);
+      }
     }
-  }, self.errorHandler, 'PluginMap', 'loadPlugin', [self.__pgmId, 'Circle', circleOptions, circle.hashCode]);
+  }, self.errorHandler, self.__pgmId, 'loadPlugin', ['Circle', circleOptions, circle.hashCode]);
 
   return circle;
 };
@@ -1482,25 +1289,10 @@ Map.prototype.addMarker = function(markerOptions, callback) {
   // Generate a makrer instance at once.
   //------------------------------------
   markerOptions.icon = markerOptions.icon || {};
-  var link;
-  if (typeof markerOptions.icon === 'string') {
-    if (markerOptions.icon.indexOf('://') === -1 &&
-        markerOptions.icon.indexOf('.') === 0) {
-
-      link = document.createElement('a');
-      link.href = markerOptions.icon;
-      markerOptions.icon = link.protocol+'//'+link.host+link.pathname + link.search;
-      link = undefined;
-    }
-  } else if (typeof markerOptions.icon === 'object' && typeof markerOptions.icon.url === 'string') {
-    if (markerOptions.icon.url.indexOf('://') === -1 &&
-        markerOptions.icon.url.indexOf('.') === 0) {
-
-      link = document.createElement('a');
-      link.href = markerOptions.icon.url;
-      markerOptions.icon.url = link.protocol+'//'+link.host+link.pathname + link.search;
-      link = undefined;
-    }
+  if (typeof markerOptions.icon === 'string' || Array.isArray(markerOptions.icon)) {
+    markerOptions.icon = {
+      url: markerOptions.icon
+    };
   }
 
   var marker = new Marker(self, markerOptions, exec);
@@ -1515,29 +1307,24 @@ Map.prototype.addMarker = function(markerOptions, callback) {
     marker = undefined;
   });
 
-  if (typeof markerOptions.anchor === 'object' &&
-      'x' in markerOptions.anchor && 'y' in markerOptions.anchor) {
-    markerOptions.anchor = [markerOptions.anchor.x, markerOptions.anchor.y];
-  }
-
   self.exec.call(self, function(result) {
-    if (marker) {
-      markerOptions.icon.size = markerOptions.icon.size || {};
-      markerOptions.icon.size.width = markerOptions.icon.size.width || result.width;
-      markerOptions.icon.size.height = markerOptions.icon.size.height || result.height;
-      markerOptions.icon.anchor = markerOptions.icon.anchor || [markerOptions.icon.size.width / 2, markerOptions.icon.size.height];
+   if (marker) {
+     markerOptions.icon.size = markerOptions.icon.size || {};
+     markerOptions.icon.size.width = markerOptions.icon.size.width || result.width;
+     markerOptions.icon.size.height = markerOptions.icon.size.height || result.height;
+     markerOptions.icon.anchor = markerOptions.icon.anchor || [markerOptions.icon.size.width / 2, markerOptions.icon.size.height];
 
-      if (!markerOptions.infoWindowAnchor) {
-        markerOptions.infoWindowAnchor = [markerOptions.icon.size.width / 2, 0];
-      }
-      marker._privateInitialize(markerOptions);
-      delete marker._privateInitialize;
+     if (!markerOptions.infoWindowAnchor) {
+       markerOptions.infoWindowAnchor = [markerOptions.icon.size.width / 2, 0];
+     }
+     marker._privateInitialize(markerOptions);
+     delete marker._privateInitialize;
 
-      if (typeof callback === 'function') {
-        callback.call(self, marker);
-      }
-    }
-  }, self.errorHandler, 'PluginMap', 'loadPlugin', [self.__pgmId, 'Marker', markerOptions, marker.hashCode]);
+     if (typeof callback === 'function') {
+       callback.call(self, marker);
+     }
+   }
+  }, self.errorHandler, self.__pgmId, 'loadPlugin', ['Marker', markerOptions, marker.hashCode]);
 
   return marker;
 };
@@ -1613,8 +1400,7 @@ Map.prototype.addMarkerCluster = function(markerClusterOptions, callback) {
     if (typeof callback === 'function') {
       callback.call(self, markerCluster);
     }
-  }, self.errorHandler, 'PluginMap', 'loadPlugin', [self.__pgmId,
-    'MarkerCluster', {
+  }, self.errorHandler, self.__pgmId, 'loadPlugin', ['MarkerCluster', {
     'positionList': positionList,
     'debug': markerClusterOptions.debug === true
   }, markerCluster.hashCode]);

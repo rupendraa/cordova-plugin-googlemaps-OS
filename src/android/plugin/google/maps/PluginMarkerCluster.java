@@ -2,7 +2,6 @@ package plugin.google.maps;
 
 import android.graphics.Bitmap;
 import android.os.Bundle;
-import android.os.Handler;
 import android.util.Log;
 
 import com.google.android.gms.maps.model.LatLng;
@@ -23,15 +22,17 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Semaphore;
 
 public class PluginMarkerCluster extends PluginMarker {
 
-  public final Map<String, STATUS> pluginMarkers = new ConcurrentHashMap<String, STATUS>();
-  public final ArrayList<String> deleteMarkers = new ArrayList<String>();
+  private final static Map<String, STATUS> pluginMarkers = new ConcurrentHashMap<String, STATUS>();
+  private final static Map<String, Integer> waitCntManager = new ConcurrentHashMap<String, Integer>();
+  private final static Map<String, Boolean> debugFlags = new ConcurrentHashMap<String, Boolean>();
+  private final static ArrayList<String> deleteMarkers = new ArrayList<String>();
 
+  private final Object semaphore = new Object();
   private boolean stopFlag = false;
-  public final Object deleteThreadLock = new Object();
+  private final Object deleteThreadLock = new Object();
 
   enum STATUS {
     WORKING,
@@ -53,15 +54,21 @@ public class PluginMarkerCluster extends PluginMarker {
     stopFlag = true;
   }
 
+  @Override
   protected void clear() {
-    synchronized (deleteMarkers) {
-      String clusterId_markerId;
-      if (pluginMarkers.size() > 0) {
-        String[] keys = pluginMarkers.keySet().toArray(new String[pluginMarkers.size()]);
-        for (int i = 0; i < keys.length; i++) {
-          clusterId_markerId = keys[i];
-          pluginMarkers.put(clusterId_markerId, STATUS.DELETED);
-          deleteMarkers.add(clusterId_markerId);
+    super.clear();
+    synchronized (semaphore) {
+      synchronized (pluginMarkers) {
+        synchronized (deleteMarkers) {
+          String clusterId_markerId;
+          if (pluginMarkers.size() > 0) {
+            String[] keys = pluginMarkers.keySet().toArray(new String[pluginMarkers.size()]);
+            for (int i = 0; i < keys.length; i++) {
+              clusterId_markerId = keys[i];
+              pluginMarkers.put(clusterId_markerId, STATUS.DELETED);
+              deleteMarkers.add(clusterId_markerId);
+            }
+          }
         }
       }
     }
@@ -85,7 +92,7 @@ public class PluginMarkerCluster extends PluginMarker {
           continue;
         }
 
-        activity.runOnUiThread(removeOverlaysOnUiThread);
+        cordova.getActivity().runOnUiThread(removeOverlaysOnUiThread);
       }
     }
   });
@@ -94,97 +101,121 @@ public class PluginMarkerCluster extends PluginMarker {
     @Override
     public void run() {
       synchronized (deleteMarkers) {
-        MetaMarker meta;
+        String markerId;
+        Marker marker;
         STATUS status;
+        String cacheKey;
+        if (deleteMarkers.size() > 0) {
+          String[] targetIDs = deleteMarkers.toArray(new String[deleteMarkers.size()]);
 
-        if (deleteMarkers.size() == 0) {
-          return;
-        }
+          for (int i = targetIDs.length - 1; i > -1; i--) {
+            markerId = targetIDs[i];
 
-        String mapId = getServiceName().split("-")[0];
-        String[] targetIDs = deleteMarkers.toArray(new String[deleteMarkers.size()]);
-        Log.d(TAG, "--->mapId = " + mapId);
-        PluginMap pluginMap = getMapInstance(mapId);
-        String activeMarkerId = null;
-        if (pluginMap.activeMarker != null) {
-          activeMarkerId = (String) pluginMap.activeMarker.getTag();
-          if (deleteMarkers.contains(activeMarkerId)) {
-            pluginMap.activeMarker = null;
-          }
-        }
+            marker = self.getMarker(markerId);
+            synchronized (pluginMarkers) {
+              status =  pluginMarkers.get(markerId);
 
-        for (int i = targetIDs.length - 1; i > -1; i--) {
-          String markerId = targetIDs[i];
+              if (!STATUS.WORKING.equals(status)) {
+                synchronized (pluginMap.objects) {
+                  _removeMarker(marker);
+                  marker = null;
 
-          if (!objects.containsKey(markerId)) {
-            continue;
-          }
-          meta = objects.get(markerId);
-
-          synchronized (pluginMarkers) {
-            status =  pluginMarkers.get(markerId);
-
-            if (!STATUS.WORKING.equals(status)) {
-              synchronized (objects) {
-                meta.marker.hideInfoWindow();
-
-                _removeMarker(PluginMarkerCluster.this, meta);
-
-                if (meta.iconCacheKey != null && iconCacheKeys.containsKey(meta.iconCacheKey)) {
-                  int count = iconCacheKeys.get(meta.iconCacheKey);
-                  if (count < 1) {
-                    iconCacheKeys.remove(meta.iconCacheKey);
-                    AsyncLoadImage.removeBitmapFromMemCahce(meta.iconCacheKey);
-                  } else {
-                    iconCacheKeys.put(meta.iconCacheKey, count - 1);
+                  cacheKey = (String) pluginMap.objects.remove("marker_icon_" + markerId);
+                  if (cacheKey != null && iconCacheKeys.containsKey(cacheKey)) {
+                    int count = iconCacheKeys.get(cacheKey);
+                    if (count < 1) {
+                      iconCacheKeys.remove(cacheKey);
+                      AsyncLoadImage.removeBitmapFromMemCahce(cacheKey);
+                    } else {
+                      iconCacheKeys.put(cacheKey, count - 1);
+                    }
                   }
+
+
+                  pluginMap.objects.remove(markerId);
+                  pluginMap.objects.remove("marker_property_" + markerId);
+                  pluginMap.objects.remove("marker_imageSize_" + markerId);
                 }
-
-
-                objects.remove(markerId);
+                pluginMarkers.remove(markerId);
+                deleteMarkers.remove(i);
+              } else {
+                pluginMarkers.put(markerId, STATUS.DELETED);
               }
-              pluginMarkers.remove(markerId);
-              deleteMarkers.remove(i);
-            } else {
-              pluginMarkers.put(markerId, STATUS.DELETED);
             }
           }
         }
       }
+      System.gc();
     }
   };
 
 
   public void remove(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
-    String mapId = args.getString(0);
-    String clusterId = args.getString(1);
-    PluginMarkerCluster instance = (PluginMarkerCluster) this.getInstance(mapId, clusterId);
-
+    String clusterId = args.getString(0);
     //Log.d(TAG, "-->remove = " + clusterId);
-    synchronized (instance.pluginMarkers) {
-      for(String key: instance.pluginMarkers.keySet()) {
+    synchronized (debugFlags) {
+      debugFlags.remove(clusterId);
+      waitCntManager.remove(clusterId);
+    }
+    synchronized (pluginMarkers) {
+      for(String key: pluginMarkers.keySet()) {
         if (key.startsWith(clusterId)) {
           //Log.d(TAG, "-->delete = " + key);
-          instance.pluginMarkers.put(key, STATUS.CREATED);
-          instance.deleteMarkers.add(key);
+          pluginMarkers.put(key, STATUS.CREATED);
+          deleteMarkers.add(key);
         }
       }
     }
 
-    synchronized (instance.deleteThreadLock) {
-      instance.deleteThreadLock.notify();
+    /*
+    String cacheKey;
+    Set<String> keySet = pluginMap.objects.keySet();
+    Marker marker;
+    String[] objectIdArray = keySet.toArray(new String[keySet.size()]);
+    for (String objectId : objectIdArray) {
+      if (objectId.contains(clusterId)) {
+        if (objectId.startsWith("marker_icon")) {
+          cacheKey = (String) pluginMap.objects.remove(objectId);
+
+          if (iconCacheKeys.containsKey(cacheKey)) {
+            int count = iconCacheKeys.get(cacheKey);
+            if (count < 1) {
+              iconCacheKeys.remove(cacheKey);
+              AsyncLoadImage.removeBitmapFromMemCahce(cacheKey);
+            } else {
+              iconCacheKeys.put(cacheKey, count - 1);
+            }
+          }
+        } else if (objectId.startsWith("marker_property_") ||
+            objectId.startsWith("marker_imageSize_")) {
+          pluginMap.objects.remove(objectId);
+        //} else if (objectId.startsWith("marker_")) {
+        //  marker = (Marker) pluginMap.objects.remove(objectId);
+        //  marker.remove();
+        } else {
+          pluginMap.objects.remove(objectId);
+        }
+      }
+    }
+    */
+    synchronized (deleteThreadLock) {
+      deleteThreadLock.notify();
     }
 
     callbackContext.success();
   }
   /**
    * Create a marker
+   *
+   * @param args
+   * @param callbackContext
+   * @throws JSONException
    */
-  @Override
+  @SuppressWarnings("unused")
   public void create(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
 
-    JSONObject params = args.getJSONObject(2);
-    String hashCode = args.getString(3);
+    JSONObject params = args.getJSONObject(1);
+    String hashCode = args.getString(2);
     JSONArray positionList = params.getJSONArray("positionList");
     JSONArray geocellList = new JSONArray();
     JSONObject position;
@@ -194,7 +225,8 @@ public class PluginMarkerCluster extends PluginMarker {
       geocellList.put(getGeocell(position.getDouble("lat"), position.getDouble("lng"), 12));
     }
 
-    String id = String.format("markercluster_%s", hashCode);
+    String id = "markercluster_" + hashCode;
+    debugFlags.put(id, params.getBoolean("debug"));
 
     final JSONObject result = new JSONObject();
     try {
@@ -208,81 +240,88 @@ public class PluginMarkerCluster extends PluginMarker {
     callbackContext.success(result);
   }
 
-  @PgmPluginMethod
+
   public void redrawClusters(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
 
-    final String mapId = args.getString(0);
-    final String clusterId = args.getString(1);
-    final JSONObject params = args.getJSONObject(2);
 
+    final HashSet<String> updateClusterIDs = new HashSet<String>();
+    final HashMap<String, Bundle> changeProperties = new HashMap<String, Bundle>();
+    final String clusterId = args.getString(0);
+    final boolean isDebug = debugFlags.get(clusterId);
+    final JSONObject params = args.getJSONObject(1);
 
-    PluginMarkerCluster instance = (PluginMarkerCluster) this.getInstance(mapId, clusterId);
-    HashSet<String> updateClusterIDs = new HashSet<String>();
-    HashMap<String, Bundle> changeProperties = new HashMap<String, Bundle>();
-    if (!params.has("new_or_update")) {
-      instance._deleteProcess(clusterId, params);
-      callbackContext.success();
-      return;
+    String markerId, clusterId_markerId;
+    JSONArray new_or_update = null;
+    if (params.has("new_or_update")) {
+      new_or_update = params.getJSONArray("new_or_update");
     }
-    //--------------------------
+
+    //---------------------------
     // Determine new or update
-    //--------------------------
-    JSONArray new_or_update = params.getJSONArray("new_or_update");
-    int cnt = new_or_update.length();
-    for (int i = 0; i < cnt; i++) {
-      JSONObject clusterData = new_or_update.getJSONObject(i);
-      JSONObject positionJson = clusterData.getJSONObject("position");
-      String markerId = clusterData.getString("__pgmId");
-      String clusterId_markerId = String.format("%s-%s", clusterId, markerId);
-      synchronized (instance.objects) {
-        if (instance.objects.containsKey(clusterId_markerId)) {
-          continue;
-        }
-      }
+    //---------------------------
+    int new_or_updateCnt = 0;
+    if (new_or_update != null) {
+      new_or_updateCnt = new_or_update.length();
+    }
+    JSONObject clusterData, positionJSON;
+    Bundle properties;
+    boolean isNew;
+    for (int i = 0; i < new_or_updateCnt; i++) {
+      clusterData = new_or_update.getJSONObject(i);
+      positionJSON = clusterData.getJSONObject("position");
+      markerId = clusterData.getString("__pgmId");
+      clusterId_markerId =  clusterId + "-" + markerId;
 
       // Save the marker properties
-      MetaMarker meta = new MetaMarker(markerId);
-      Log.d(TAG, String.format("-->put(%s) = %s", clusterId_markerId, meta));
-      instance.objects.put(clusterId_markerId, meta);
+      pluginMap.objects.put("marker_property_" + clusterId_markerId, clusterData);
 
-      // Save the WORKING status flag
-      synchronized (instance.pluginMarkers) {
-        instance.pluginMarkers.put(clusterId_markerId, STATUS.WORKING);
+      // Set the WORKING status flag
+      synchronized (pluginMarkers) {
+        pluginMarkers.put(clusterId_markerId, STATUS.WORKING);
       }
       updateClusterIDs.add(clusterId_markerId);
 
-      // Prepare the mater properties for addMarker()
-      meta.properties = clusterData;
-
-      Bundle properties = new Bundle();
-      properties.putDouble("lat", positionJson.getDouble("lat"));
-      properties.putDouble("lng", positionJson.getDouble("lng"));
+      // Prepare the marker properties for addMarker()
+      properties = new Bundle();
+      properties.putDouble("lat", positionJSON.getDouble("lat"));
+      properties.putDouble("lng", positionJSON.getDouble("lng"));
+      if (clusterData.has("title")) {
+        properties.putString("title", clusterData.getString("title"));
+      }
+      properties.putString("__pgmId", clusterId_markerId);
 
       if (clusterData.has("icon")) {
         Object iconObj = clusterData.get("icon");
 
         if (iconObj instanceof String) {
           Bundle iconProperties = new Bundle();
-          iconProperties.putString("url", clusterData.getString("icon"));
+          iconProperties.putString("url", (String) iconObj);
           properties.putBundle("icon", iconProperties);
+
         } else if (iconObj instanceof JSONObject) {
-
           JSONObject icon = clusterData.getJSONObject("icon");
-
           Bundle iconProperties = PluginUtil.Json2Bundle(icon);
           if (clusterData.has("isClusterIcon") && clusterData.getBoolean("isClusterIcon")) {
             if (icon.has("label")) {
               JSONObject label = icon.getJSONObject("label");
-              label.put("text", String.format("%s", clusterData.getInt("count")));
+              if (isDebug) {
+                label.put("text", markerId);
+              } else {
+                label.put("text", clusterData.getInt("count") + "");
+              }
               if (label.has("color")) {
                 label.put("color", PluginUtil.parsePluginColor(label.getJSONArray("color")));
               }
               iconProperties.putBundle("label", PluginUtil.Json2Bundle(label));
             } else {
               Bundle label = new Bundle();
-              label.putInt("fontSize", 15);
-              label.putBoolean("bold", true);
-              label.putString("text", clusterData.getInt("count") + "");
+              if (isDebug) {
+                label.putString("text", markerId);
+              } else {
+                label.putInt("fontSize", 15);
+                label.putBoolean("bold", true);
+                label.putString("text", clusterData.getInt("count") + "");
+              }
               iconProperties.putBundle("label", label);
             }
           }
@@ -301,59 +340,73 @@ public class PluginMarkerCluster extends PluginMarker {
           properties.putBundle("icon", iconProperties);
         }
       }
+
       changeProperties.put(clusterId_markerId, properties);
+    }
+
+    //Log.d(TAG, "---> deleteCnt : " + deleteCnt + ", newCnt : " + newCnt + ", updateCnt : " + updateCnt + ", reuseCnt : " + reuseCnt);
+
+    if (updateClusterIDs.size() == 0) {
+      deleteProcess(clusterId, params);
+      callbackContext.success();
+      return;
     }
 
     //---------------------------
     // mapping markers on the map
     //---------------------------
-
     final JSONObject allResults = new JSONObject();
-    final CountDownSemaphore localSemaphore = new CountDownSemaphore(updateClusterIDs.size());
 
-    activity.runOnUiThread(new Runnable() {
+    cordova.getActivity().runOnUiThread(new Runnable() {
       @Override
       public void run() {
-
-
         Iterator<String> iterator;
+        String clusterId_markerId;
+        Bundle markerProperties;
+        Marker marker;
+        Boolean isNew;
 
         //---------
         // new or update
         //---------
+        int waitCnt = updateClusterIDs.size();
+        int currentCnt = 0;
+        waitCntManager.put(clusterId, updateClusterIDs.size());
         iterator = updateClusterIDs.iterator();
         while (iterator.hasNext()) {
-
-          final String clusterId_markerId = iterator.next();
+          currentCnt++;
+          clusterId_markerId = iterator.next();
           //Log.d(TAG, "---> progress = " + currentCnt + "/ " + waitCnt + ", " + clusterId_markerId);
-          synchronized (instance.pluginMarkers) {
-            instance.pluginMarkers.put(clusterId_markerId, STATUS.WORKING);
+          synchronized (pluginMarkers) {
+            pluginMarkers.put(clusterId_markerId, STATUS.WORKING);
           }
-          MetaMarker meta = instance.objects.get(clusterId_markerId);
-          boolean isNew = meta.marker == null;
+          isNew = !pluginMap.objects.containsKey(clusterId_markerId);
 
-          Bundle markerProperties = changeProperties.get(clusterId_markerId);
+          // Get the marker properties
+          markerProperties = changeProperties.get(clusterId_markerId);
           if (clusterId_markerId.contains("-marker_")) {
-            //------------------
+            //-------------------
             // regular marker
-            //------------------
+            //-------------------
             if (isNew) {
+              final String fMarkerId = clusterId_markerId;
+              JSONObject properties = (JSONObject) pluginMap.objects.get("marker_property_" + clusterId_markerId);
               try {
-                instance._create(clusterId_markerId, meta.properties, new ICreateMarkerCallback() {
+                _create(clusterId_markerId, properties, new ICreateMarkerCallback() {
                   @Override
-                  public void onSuccess(MetaMarker meta1) {
-                    synchronized (instance.pluginMarkers) {
-                      if (instance.pluginMarkers.get(clusterId_markerId) == STATUS.DELETED) {
-                        _removeMarker(mapId, clusterId_markerId);
-                        instance.pluginMarkers.remove(clusterId_markerId);
-                      } else {
-                        instance.pluginMarkers.put(clusterId_markerId, STATUS.CREATED);
+                  public void onSuccess(Marker marker) {
 
-                        meta.marker = meta1.marker;
+                    synchronized (pluginMarkers) {
+                      if (pluginMarkers.get(fMarkerId) == STATUS.DELETED) {
+                        _removeMarker(marker);
+                        pluginMarkers.remove(fMarkerId);
+                      } else {
+                        pluginMarkers.put(fMarkerId, STATUS.CREATED);
+
 
                         JSONObject result = new JSONObject();
-                        if (instance.icons.containsKey(clusterId_markerId)) {
-                          Bitmap icon = instance.icons.get(clusterId_markerId);
+                        if (icons.containsKey(fMarkerId)) {
+                          Bitmap icon = icons.get(fMarkerId);
                           try {
                             result.put("width", icon.getWidth() / density);
                             result.put("height", icon.getHeight() / density);
@@ -369,91 +422,104 @@ public class PluginMarkerCluster extends PluginMarker {
                           }
                         }
                         try {
-                          allResults.put(clusterId_markerId.split("-")[1], result);
+                          allResults.put(fMarkerId.split("-")[1], result);
                         } catch (JSONException e) {
                           e.printStackTrace();
                         }
                       }
-
-                      localSemaphore.releaseOne();
                     }
+                    decreaseWaitCnt(clusterId);
                   }
 
                   @Override
                   public void onError(String message) {
-
-                    synchronized (instance.pluginMarkers) {
-                      instance.pluginMarkers.put(clusterId_markerId, STATUS.DELETED);
+                    synchronized (pluginMarkers) {
+                      pluginMarkers.put(fMarkerId, STATUS.DELETED);
                     }
-                    synchronized (instance.deleteMarkers) {
-                      instance.deleteMarkers.add(clusterId_markerId);
+                    Log.e(TAG, message);
+                    decreaseWaitCnt(clusterId);
+                    synchronized (deleteMarkers) {
+                      deleteMarkers.add(fMarkerId);
                     }
-                    localSemaphore.releaseOne();
                   }
                 });
               } catch (JSONException e) {
                 e.printStackTrace();
-                localSemaphore.releaseOne();
+                decreaseWaitCnt(clusterId);
               }
             } else {
+              marker = getMarker(clusterId_markerId);
+              //----------------------------------------
+              // Set the title and snippet properties
+              //----------------------------------------
               if (markerProperties.containsKey("title")) {
-                meta.marker.setTitle(markerProperties.getString("title"));
+                marker.setTitle(markerProperties.getString("title"));
               }
               if (markerProperties.containsKey("snippet")) {
-                meta.marker.setSnippet(markerProperties.getString("snippet"));
+                marker.setSnippet(markerProperties.getString("snippet"));
               }
-              synchronized (instance.pluginMarkers) {
-                if (instance.pluginMarkers.get(clusterId_markerId) == STATUS.DELETED) {
-                  _removeMarker(mapId, clusterId_markerId);
-                  instance.pluginMarkers.remove(clusterId_markerId);
+              synchronized (pluginMarkers) {
+                if (pluginMarkers.get(clusterId_markerId) == STATUS.DELETED) {
+                  _removeMarker(marker);
+                  pluginMarkers.remove(clusterId_markerId);
                 } else {
-                  instance.pluginMarkers.put(clusterId_markerId, STATUS.CREATED);
+                  pluginMarkers.put(clusterId_markerId, STATUS.CREATED);
                 }
               }
-              localSemaphore.releaseOne();
+              decreaseWaitCnt(clusterId);
             }
             continue;
-
           }
-
           //--------------------------
           // cluster icon
           //--------------------------
           if (isNew) {
             // If the requested id is new location, create a marker
-            meta.marker = instance.getMapInstance(mapId).getGoogleMap().addMarker(new MarkerOptions()
+            marker = map.addMarker(new MarkerOptions()
                     .position(new LatLng(markerProperties.getDouble("lat"), markerProperties.getDouble("lng")))
                     .visible(false));
-            meta.marker.setTag(clusterId_markerId);
+            marker.setTag(clusterId_markerId);
+
+            // Store the marker instance with markerId
+            synchronized (pluginMap.objects) {
+              pluginMap.objects.put(clusterId_markerId, marker);
+            }
+          } else {
+            marker = getMarker(clusterId_markerId);
           }
           //----------------------------------------
           // Set the title and snippet properties
           //----------------------------------------
           if (markerProperties.containsKey("title")) {
-            meta.marker.setTitle(markerProperties.getString("title"));
+            marker.setTitle(markerProperties.getString("title"));
           }
           if (markerProperties.containsKey("snippet")) {
-            meta.marker.setSnippet(markerProperties.getString("snippet"));
+            marker.setSnippet(markerProperties.getString("snippet"));
           }
-
-          //----------------------------------------
-          // Set icon
-          //----------------------------------------
+/*
+          if (!isNew) {
+            synchronized (pluginMarkers) {
+              pluginMarkers.put(markerId, STATUS.CREATED);
+            }
+            decreaseWaitCnt(clusterId);
+            continue;
+          }
+*/
           if (markerProperties.containsKey("icon")) {
             Bundle icon = markerProperties.getBundle("icon");
-
+            final String fMarkerId = clusterId_markerId;
             //Log.d(TAG, "---> targetMarkerId = " + targetMarkerId + ", marker = " + marker);
-            _setIconToClusterMarker(mapId, clusterId_markerId, meta, icon, new PluginAsyncInterface() {
+            setIconToClusterMarker(clusterId_markerId, marker, icon, new PluginAsyncInterface() {
               @Override
               public void onPostExecute(Object object) {
                 //--------------------------------------
                 // Marker was updated
                 //--------------------------------------
-                synchronized (instance.pluginMarkers) {
+                decreaseWaitCnt(clusterId);
+                synchronized (pluginMarkers) {
                   //Log.d(TAG, "create : " + fMarkerId + " = CREATED");
-                  instance.pluginMarkers.put(clusterId_markerId, STATUS.CREATED);
+                  pluginMarkers.put(fMarkerId, STATUS.CREATED);
                 }
-                localSemaphore.releaseOne();
               }
 
               @Override
@@ -462,95 +528,115 @@ public class PluginMarkerCluster extends PluginMarker {
                 // Could not read icon for some reason
                 //--------------------------------------
                 Log.e(TAG, errorMsg);
+                decreaseWaitCnt(clusterId);
                 synchronized (deleteMarkers) {
-                  deleteMarkers.add(clusterId_markerId);
+                  deleteMarkers.add(fMarkerId);
                 }
                 synchronized (pluginMarkers) {
-                  pluginMarkers.put(clusterId_markerId, STATUS.DELETED);
+                  pluginMarkers.put(fMarkerId, STATUS.DELETED);
                 }
-                localSemaphore.releaseOne();
               }
             });
           } else {
             //--------------------
             // No icon for marker
             //--------------------
-            synchronized (instance.pluginMarkers) {
+            synchronized (pluginMarkers) {
               //Log.d(TAG, "create : " + clusterId_markerId + " = CREATED");
-              instance.pluginMarkers.put(clusterId_markerId, STATUS.CREATED);
+              pluginMarkers.put(clusterId_markerId, STATUS.CREATED);
             }
-            localSemaphore.releaseOne();
+            decreaseWaitCnt(clusterId);
           }
         }
+        updateClusterIDs.clear();
+
 
       }
     });
-
-
-    instance._deleteProcess(clusterId, params);
-    localSemaphore.waitLock();
-
+    synchronized (semaphore) {
+      try {
+        semaphore.wait();
+        deleteProcess(clusterId, params);
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
+    }
     callbackContext.success(allResults);
+
   }
-  private void _deleteProcess(final String clusterId, final JSONObject params) {
+  private void deleteProcess(final String clusterId, final JSONObject params) {
     if (!params.has("delete")) {
       return;
     }
-
-
-
-    activity.runOnUiThread(new Runnable() {
+    cordova.getThreadPool().submit(new Runnable() {
       @Override
       public void run() {
 
         try {
           JSONArray deleteClusters = params.getJSONArray("delete");
-
-          if (deleteClusters == null) {
-            return;
-          }
-          //-------------------------------------
-          // delete markers on the delete thread
-          //-------------------------------------
-          int deleteCnt = deleteClusters.length();
-          String clusterId_markerId;
-          for (int i = 0; i < deleteCnt; i++) {
-            clusterId_markerId = String.format("%s-%s", clusterId, deleteClusters.getString(i));
-            if (!PluginMarkerCluster.this.objects.containsKey(clusterId_markerId)) {
-              continue;
+          if (deleteClusters != null) {
+            //-------------------------------------
+            // delete markers on the delete thread
+            //-------------------------------------
+            int deleteCnt = deleteClusters.length();
+            String clusterId_markerId;
+            for (int i = 0; i < deleteCnt; i++) {
+              clusterId_markerId = clusterId + "-" + deleteClusters.getString(i);
+              deleteMarkers.add(clusterId_markerId);
             }
-            MetaMarker meta = PluginMarkerCluster.this.objects.get(clusterId_markerId);
-            Log.d(TAG, String.format("--> delete %s / %s", clusterId_markerId, meta));
-            _removeMarker(PluginMarkerCluster.this, meta);
+
+            synchronized (deleteThreadLock) {
+              deleteThreadLock.notify();
+            }
+
           }
-        } catch (JSONException e) {
-          e.printStackTrace();
-        }
+        } catch (Exception e) {e.printStackTrace();}
       }
     });
   }
 
-  private void _setIconToClusterMarker(final String mapId, final String markerId, final MetaMarker meta, final Bundle iconProperty, final PluginAsyncInterface callback) {
+  private void decreaseWaitCnt(String clusterId) {
+
+    //--------------------------------------
+    // Icon is set to marker
+    //--------------------------------------
+    synchronized (waitCntManager) {
+      int waitCnt = waitCntManager.get(clusterId);
+      waitCnt = waitCnt - 1;
+      //Log.d(TAG, "--->waitCnt = " + waitCnt);
+      if (waitCnt == 0) {
+        synchronized (semaphore) {
+          semaphore.notify();
+        }
+
+      }
+      waitCntManager.put(clusterId, waitCnt);
+    }
+  }
+
+  private void setIconToClusterMarker(final String markerId, final Marker marker, final Bundle iconProperty, final PluginAsyncInterface callback) {
     synchronized (pluginMarkers) {
       if (STATUS.DELETED.equals(pluginMarkers.get(markerId))) {
-        synchronized (objects) {
-          PluginMarkerCluster.this._removeMarker(mapId, markerId);
-          objects.remove(markerId);
+        synchronized (pluginMap.objects) {
+          PluginMarkerCluster.this._removeMarker(marker);
+          pluginMap.objects.remove(markerId);
+          pluginMap.objects.remove("marker_property_" + markerId);
         }
         pluginMarkers.remove(markerId);
         callback.onError("marker has been removed");
         return;
       }
     }
-    _setIcon(this, meta, iconProperty, new PluginAsyncInterface() {
+    PluginMarkerCluster.super.setIcon_(marker, iconProperty, new PluginAsyncInterface() {
       @Override
       public void onPostExecute(Object object) {
         Marker marker = (Marker) object;
         synchronized (pluginMarkers) {
           if (STATUS.DELETED.equals(pluginMarkers.get(markerId))) {
-            synchronized (objects) {
-              PluginMarkerCluster.this._removeMarker(mapId, markerId);
-              objects.remove(markerId);
+            synchronized (pluginMap.objects) {
+              PluginMarkerCluster.this._removeMarker(marker);
+              pluginMap.objects.remove(markerId);
+              pluginMap.objects.remove("marker_property_" + markerId);
             }
             pluginMarkers.remove(markerId);
             callback.onPostExecute(null);
@@ -566,12 +652,14 @@ public class PluginMarkerCluster extends PluginMarker {
 
       @Override
       public void onError(String errorMsg) {
-        synchronized (objects) {
-          if (meta.marker != null && meta.marker.getTag() != null) {
-            PluginMarkerCluster.this._removeMarker(mapId, markerId);
+        synchronized (pluginMap.objects) {
+          if (marker != null && marker.getTag() != null) {
+            PluginMarkerCluster.this._removeMarker(marker);
           }
-          objects.remove(markerId);
+          pluginMap.objects.remove(markerId);
+          pluginMap.objects.remove("marker_property_" + markerId);
           pluginMarkers.remove(markerId);
+          pluginMap.objects.remove(markerId);
           pluginMarkers.put(markerId, STATUS.DELETED);
         }
         callback.onPostExecute(errorMsg);
@@ -688,32 +776,4 @@ public class PluginMarkerCluster extends PluginMarker {
     }
   }
 
-
-  class CountDownSemaphore {
-    int count;
-    final Object semaphore = new Object();
-    public CountDownSemaphore(int countDownInit) {
-      this.count = countDownInit;
-    }
-
-    public void releaseOne() {
-      this.count--;
-      if (this.count <= 0) {
-        synchronized (this.semaphore) {
-          this.semaphore.notify();
-        }
-      }
-    }
-    public void waitLock()  {
-      if (this.count > 0) {
-        synchronized (this.semaphore) {
-          try {
-            this.semaphore.wait();
-          } catch (InterruptedException e) {
-            e.printStackTrace();
-          }
-        }
-      }
-    }
-  }
 }

@@ -15,15 +15,13 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 
 import za.co.twyst.tbxml.TBXML;
 
 
-public class PluginKmlOverlay extends MyPlugin implements IOverlayPlugin {
+public class PluginKmlOverlay extends MyPlugin implements MyPluginInterface {
   private HashMap<String, Bundle> styles = new HashMap<String, Bundle>();
-  private String wwwDirName = "www";
 
   private enum KML_TAG {
     NOT_SUPPORTED,
@@ -36,11 +34,6 @@ public class PluginKmlOverlay extends MyPlugin implements IOverlayPlugin {
     coordinates
   }
 
-  @Override
-  public void setPluginMap(PluginMap map) {
-    // stub
-  }
-
   /**
    * Create kml overlay
    *
@@ -50,20 +43,11 @@ public class PluginKmlOverlay extends MyPlugin implements IOverlayPlugin {
    */
   public void create(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
 
-    final JSONObject opts = args.getJSONObject(2);
+    final JSONObject opts = args.getJSONObject(1);
+    self = this;
     if (!opts.has("url")) {
       callbackContext.error("No kml file is specified");
       return;
-    }
-
-
-    try {
-      if (Arrays.asList(cordova.getContext().getAssets().list("")).contains("capacitor.config.json")) {
-        // Capacitor
-        this.wwwDirName = "public";
-      }
-    } catch (Exception e) {
-      // ignore
     }
 
     cordova.getActivity().runOnUiThread(new Runnable() {
@@ -86,7 +70,6 @@ public class PluginKmlOverlay extends MyPlugin implements IOverlayPlugin {
         if (!urlStr.contains("://") &&
             !urlStr.startsWith("/") &&
             !urlStr.startsWith("www/") &&
-            !urlStr.startsWith("public/") &&
             !urlStr.startsWith("data:image") &&
             !urlStr.startsWith("./") &&
             !urlStr.startsWith("../")) {
@@ -96,10 +79,10 @@ public class PluginKmlOverlay extends MyPlugin implements IOverlayPlugin {
         if (currentPageUrl.startsWith("http://localhost") ||
             currentPageUrl.startsWith("http://127.0.0.1")) {
           if (urlStr.contains("://")) {
-            urlStr = urlStr.replaceAll("http://.+?/", "file:///android_asset/" + wwwDirName + "/");
+            urlStr = urlStr.replaceAll("http://.+?/", "file:///android_asset/www/");
           } else {
             // Avoid WebViewLocalServer (because can not make a connection for some reason)
-            urlStr = "file:///android_asset/" + wwwDirName + "/";
+            urlStr = "file:///android_asset/www/".concat(urlStr);
           }
         }
 
@@ -115,7 +98,7 @@ public class PluginKmlOverlay extends MyPlugin implements IOverlayPlugin {
 
         // Avoid WebViewLocalServer (because can not make a connection for some reason)
         if (urlStr.contains("http://localhost") || urlStr.contains("http://127.0.0.1")) {
-          urlStr = urlStr.replaceAll("^http://[^\\/]+\\//", "file:///android_asset/" + wwwDirName);
+          urlStr = urlStr.replaceAll("^http://[^\\/]+\\//", "file:///android_asset/www/");
         }
 
 
@@ -129,11 +112,6 @@ public class PluginKmlOverlay extends MyPlugin implements IOverlayPlugin {
         });
       }
     });
-  }
-
-  @Override
-  public void remove(JSONArray args, CallbackContext callbackContext) throws JSONException {
-    // stub
   }
 
   private Bundle loadKml(String urlStr) {

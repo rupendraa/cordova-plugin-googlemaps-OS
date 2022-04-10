@@ -2,18 +2,17 @@ repositories {
   maven { url 'https://maven.google.com' }
   mavenCentral()
   jcenter()
-  def libsDirPath = System.getProperty("user.dir")
   flatDir{
-    dirs 'src/main/libs', 'libs', "${libsDirPath}/libs"
+    dirs 'src/main/libs', 'libs'
   }
 }
 
 dependencies {
-  implementation(name:'tbxml-android', ext:'aar')
+  compile(name:'tbxml-android', ext:'aar')
 }
 
 android {
-  compileSdkVersion 28
+  compileSdkVersion 26
 
   packagingOptions {
     exclude 'README'

@@ -1,4 +1,5 @@
 
+
 /* eslint no-useless-escape: off */
 
 var InlineWorker = require('cordova-plugin-googlemaps.InlineWorker');
@@ -355,9 +356,6 @@ function loadKml(self) {
     var _proc = _parser.tagSwitchTables[tagName] || _parser._default;
     //console.log("--->tagName = " + tagName, tagName in _parser.tagSwitchTables ? tagName : '_default');
     var result = _proc.call(_parser, rootElement);
-    if (!result) {
-      return null;
-    }
     result.tagName = tagName;
     if (rootElement.attributes) {
       var attrNames = Object.keys(rootElement.attributes);
@@ -464,9 +462,6 @@ function loadKml(self) {
   KmlParserClass.prototype._default = function(rootElement) {
     var _parser = this,
       result = {};
-    if (!rootElement.value) {
-      return null;
-    }
 
     if (rootElement.value.children) {
       var children = [];

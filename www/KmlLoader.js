@@ -86,7 +86,7 @@ KmlLoader.prototype.parseKmlFile = function(callback) {
       //result.set('kmlData', rawKmlData);
       callback.call(self, self.camera, result);
     });
-  }, self.map.errorHandler, 'PluginMap', 'loadPlugin', [self.map.__pgmId, 'KmlOverlay', {
+  }, self.map.errorHandler, self.map.__pgmId, 'loadPlugin', ['KmlOverlay', {
     url: self.options.url
   }], {sync: true});
 };
@@ -1063,7 +1063,6 @@ KmlLoader.prototype.parseLookAtTag = function(params, callback) {
 //-------------------------------
 function kmlColorToRGBA(colorStr) {
   var rgba = [];
-  colorStr = colorStr + ''; // convert to String mandatory
   colorStr = colorStr.replace('#', '');
   for (var i = 6; i >= 0; i -= 2) {
     rgba.push(parseInt(colorStr.substring(i, i + 2), 16));

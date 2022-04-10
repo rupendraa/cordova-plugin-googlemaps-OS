@@ -1,5 +1,6 @@
 
 var BaseArrayClass = require('./BaseArrayClass');
+var utils = require('cordova/utils');
 
 var resolvedPromise = typeof Promise == 'undefined' ? null : Promise.resolve();
 var nextTick = resolvedPromise ? function (fn) {
@@ -44,14 +45,11 @@ function HTMLColor2RGBA(colorValue, defaultOpacity) {
   }
   if (colorStr.match(/^#([0-9A-F]){3}$/i)) {
     matches = colorStr.match(/([0-9A-F])/ig);
-    var r = parseInt(matches[0], 16);
-    var g = parseInt(matches[1], 16);
-    var b = parseInt(matches[2], 16);
 
     return [
-      (r << 4) + r,
-      (g << 4) + g,
-      (b << 4) + b,
+      parseInt(matches[0], 16),
+      parseInt(matches[1], 16),
+      parseInt(matches[2], 16),
       alpha
     ];
   }
@@ -61,14 +59,10 @@ function HTMLColor2RGBA(colorValue, defaultOpacity) {
     alpha = parseInt(alpha + alpha, 16);
 
     matches = colorStr.match(/([0-9A-F])/ig);
-    var r = parseInt(matches[0], 16);
-    var g = parseInt(matches[1], 16);
-    var b = parseInt(matches[2], 16);
-
     return [
-      (r << 4) + r,
-      (g << 4) + g,
-      (b << 4) + b,
+      parseInt(matches[0], 16),
+      parseInt(matches[1], 16),
+      parseInt(matches[2], 16),
       alpha
     ];
   }
@@ -95,7 +89,7 @@ function HTMLColor2RGBA(colorValue, defaultOpacity) {
   // convert rgb(), rgba()
   if (colorStr.match(/^rgba?\([\d,.\s]+\)$/)) {
     matches = colorStr.match(/([\d.]+)/g);
-    alpha = matches.length == 4 ? Math.floor(parseFloat(matches[3]) * 255) : alpha;
+    alpha = matches.length == 4 ? Math.floor(parseFloat(matches[3]) * 256) : alpha;
     return [
       parseInt(matches[0], 10),
       parseInt(matches[1], 10),
@@ -107,7 +101,7 @@ function HTMLColor2RGBA(colorValue, defaultOpacity) {
   // convert hsl(), hsla()
   if (colorStr.match(/^hsla?\([\d%,.\s]+\)$/)) {
     matches = colorStr.match(/([\d%.]+)/g);
-    alpha = matches.length == 4 ? Math.floor(parseFloat(matches[3]) * 255) : alpha;
+    alpha = matches.length == 4 ? Math.floor(parseFloat(matches[3]) * 256) : alpha;
     var rgb = HLStoRGB(matches[0], matches[1], matches[2]);
     rgb.push(alpha);
     return rgb;
@@ -227,7 +221,7 @@ function getDivRect(div) {
 }
 
 var ignoreTags = [
-  'pre', 'textarea', 'p', 'input', 'caption', 'canvas', 'svg'
+  'pre', 'textarea', 'p', 'form', 'input', 'caption', 'canvas', 'svg'
 ];
 
 function shouldWatchByNative(node) {
@@ -301,11 +295,11 @@ function getZIndex(dom) {
   if (dom.currentStyle) {
     z = dom.currentStyle['z-index'];
   }
-  var elemId = dom.__pluginDomId;
+  var elemId = dom.getAttribute('__pluginDomId');
   var parentNode = dom.parentNode;
   var parentZIndex = 0;
   if (parentNode && parentNode.nodeType === Node.ELEMENT_NODE) {
-    var parentElemId = parentNode.__pluginDomId;
+    var parentElemId = parentNode.getAttribute('__pluginDomId');
     if (parentElemId in internalCache) {
       parentZIndex = internalCache[parentElemId];
     } else {
@@ -555,8 +549,8 @@ function getLatLng(target) {
 function convertToPositionArray(array) {
   array = array || [];
 
-  if (!Array.isArray(array)) {
-    if (array.type === 'LatLngBounds' || array.southwest && array.northeast) {
+  if (!utils.isArray(array)) {
+    if (array.type === 'LatLngBounds') {
       array = [
         array.southwest,
         {
@@ -683,17 +677,14 @@ function getPluginDomId(element) {
   if (!element || !shouldWatchByNative(element)) {
     return;
   }
-  var elemId = element.__pluginDomId;
+  var elemId = element.getAttribute('__pluginDomId');
   if (!elemId) {
     if (element === document.body) {
       elemId = 'root';
     } else {
       elemId = 'pgm' + Math.floor(Math.random() * Date.now());
     }
-    Object.defineProperty(element, '__pluginDomId', {
-      enumerable: false,
-      value: elemId
-    });
+    element.setAttribute('__pluginDomId', elemId);
   }
   return elemId;
 }
@@ -733,11 +724,6 @@ function createEvent(eventName, properties) {
   return evt;
 }
 
-function hasTransparentClass(div) {
-  return (div.classList && div.classList.contains('_gmaps_cdv_') ||
-    div.className && div.className.indexOf('_gmaps_cdv_') > -1);
-}
-
 function attachTransparentClass(div) {
 
   if (div.classList && !div.classList.contains('_gmaps_cdv_')) {
@@ -748,32 +734,36 @@ function attachTransparentClass(div) {
 
   if (div.shadowRoot) {
     var styleAttr = div.getAttribute('style') || '';
-    if (styleAttr && styleAttr.indexOf('--pgm-background-color') === -1) {
-      styleAttr = styleAttr + ' --ion-background-color: var(--pgm-background-color);';
+    if (styleAttr && styleAttr.indexOf('--ion-background-color') === -1) {
+      styleAttr = styleAttr + ' --ion-background-color: transparent;';
     }
     div.setAttribute('style', styleAttr);
   }
 }
-function detachTransparentClass(div) {
-
-  if (div.classList && div.classList.contains('_gmaps_cdv_')) {
-    div.classList.remove('_gmaps_cdv_');
-  } else if (div.className && div.className.indexOf('_gmaps_cdv_') > -1) {
-    div.className = div.className.replace('_gmaps_cdv_', '');
-  }
-
-  if (div.shadowRoot) {
-    var styleAttr = div.getAttribute('style') || '';
-    if (styleAttr && styleAttr.indexOf('--pgm-background-color') > -1) {
-      styleAttr = styleAttr.replace('--ion-background-color: var(--pgm-background-color);', '');
-    }
-    div.setAttribute('style', styleAttr);
-
-    var hiddenChildren = div.querySelectorAll('*');
-    hiddenChildren = Array.prototype.splice(hiddenChildren, 0);
-    hiddenChildren.forEach(detachTransparentClass);
-  }
-}
+// function dettachTransparentClass(root) {
+//
+//   if (div.classList && div.classList.contains('_gmaps_cdv_')) {
+//     div.classList.remove('_gmaps_cdv_');
+//   } else if (div.className && div.className.indexOf('_gmaps_cdv_') === -1) {
+//     div.className = div.className.replace('_gmaps_cdv_', '');
+//   }
+//
+//   var visibilityCSS = getStyle(node, 'visibility');
+//   if (getStyle(div, 'background-color') === 'transparent !important') {
+//     div.style.backgroundColor = undefined;
+//   }
+//   if (getStyle(div, 'background') === 'transparent !important') {
+//     div.style.backgroundColor = undefined;
+//   }
+//   if (getStyle(div, 'background-image') === 'transparent !important') {
+//     div.style.backgroundImage = undefined;
+//   }
+//   if (div.shadowRoot) {
+//     var hiddenChildren = div.querySelectorAll('*');
+//     hiddenChildren = Array.prototype.splice(hiddenChildren, 0);
+//     hiddenChildren.forEach(dettachTransparentClass);
+//   }
+// }
 
 module.exports = {
   _clearInternalCache: _clearInternalCache,
@@ -797,9 +787,8 @@ module.exports = {
   getPluginDomId: getPluginDomId,
   hashCode: hashCode,
   createEvent: createEvent,
-  detachTransparentClass: detachTransparentClass,
-  attachTransparentClass: attachTransparentClass,
-  hasTransparentClass: hasTransparentClass
+  //dettachTransparentClass: dettachTransparentClass,
+  attachTransparentClass: attachTransparentClass
 };
 
 if (cordova && cordova.platformId === 'browser') {

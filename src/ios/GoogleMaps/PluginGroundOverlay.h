@@ -9,7 +9,6 @@
 #import "CordovaGoogleMaps.h"
 #import "IPluginProtocol.h"
 #import "PluginUtil.h"
-#import <WebKit/WKWebView.h>
 
 @interface PluginGroundOverlay : CDVPlugin<IPluginProtocol>
 //@property (nonatomic, strong) NSCache* imgCache;
@@ -26,5 +25,6 @@
 - (void)setBearing:(CDVInvokedUrlCommand*)command;
 - (void)setZIndex:(CDVInvokedUrlCommand *)command;
 - (void)_setImage:(GMSGroundOverlay *)layer urlStr:(NSString *)urlStr completionHandler:(void (^)(BOOL succeeded))completionHandler;
+- (void)downloadImageWithURL:(NSURL *)url completionBlock:(void (^)(BOOL succeeded, UIImage *image))completionBlock;
 
 @end

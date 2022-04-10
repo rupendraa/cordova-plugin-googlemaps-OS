@@ -25,7 +25,6 @@ import android.view.ViewTreeObserver;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
 import com.google.android.gms.maps.MapsInitializer;
-import com.google.android.gms.maps.MapsInitializer.Renderer;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
@@ -474,7 +473,7 @@ public class CordovaGoogleMaps extends CordovaPlugin implements ViewTreeObserver
 
     pluginStreetView.mapCtrl = CordovaGoogleMaps.this;
     pluginStreetView.self = pluginStreetView;
-    
+
     pluginStreetView.getPanorama(args, callbackContext);
   }
 
