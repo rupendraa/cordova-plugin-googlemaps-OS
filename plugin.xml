@@ -261,11 +261,13 @@
     <framework src="com.google.android.gms:play-services-maps:$PLAY_SERVICES_VERSION"/>
     <preference name="PLAY_SERVICES_LOCATION_VERSION" default="15.0.1"/>
     <framework src="com.google.android.gms:play-services-location:$PLAY_SERVICES_LOCATION_VERSION"/>
-
+    
+    <!--
     <!-- Minimum required version of Android Support library v4 for this plugin. https://developers.google.com/android/guides/releases -->
     <preference name="ANDROIDX_VERSION" default="1.+" />
     <framework src="androidx.legacy:legacy-support-v4:$ANDROIDX_VERSION" />
-
+    -->
+    
     <!-- Base messages -->
     <resource-file src="src/android/res/values/pgm_strings.xml" target="res/values/pgm_strings.xml"/>
     <!-- localized messages for Spanish -->
