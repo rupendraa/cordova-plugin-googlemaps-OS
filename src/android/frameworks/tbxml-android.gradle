@@ -1,7 +1,7 @@
 repositories {
   maven { url 'https://maven.google.com' }
   mavenCentral()
-  jcenter()
+  google()
   def libsDirPath = System.getProperty("user.dir")
   flatDir{
     dirs 'src/main/libs', 'libs', "${libsDirPath}/libs"
@@ -9,7 +9,9 @@ repositories {
 }
 
 dependencies {
-  implementation(name:'tbxml-android', ext:'aar')
+	implementation(name:'places-maps-sdk-3.1.0-beta', ext:'aar')
+	implementation 'com.google.android.libraries.maps:maps:3.1.0-beta'
+	implementation 'com.google.maps.android:android-maps-utils-v3:1.3.1'
 }
 
 android {
