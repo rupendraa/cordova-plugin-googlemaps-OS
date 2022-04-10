@@ -89,6 +89,8 @@ Map.prototype.getMap = function(meta, div, options) {
     args = [meta];
   options = options || {};
 
+  self.set('clickablePOI', true)  // Current POI are clickable by default
+  
   self.set('clickable', options.clickable === false ? false : true);
   self.set('visible', options.visible === false ? false : true);
 
@@ -481,6 +483,12 @@ Map.prototype.animateCamera = function(cameraPosition, callback) {
       return Promise.reject(error);
     }
   }
+  if ('heading' in cameraPosition) {
+    cameraPosition.heading = cameraPosition.heading % 360;
+  }
+  if ('tilt' in cameraPosition) {
+    cameraPosition.tilt = Math.min(Math.max(0, cameraPosition.tilt), 90);
+  }
   // if (!('padding' in cameraPosition)) {
   //   cameraPosition.padding = 10;
   // }
@@ -668,6 +676,17 @@ Map.prototype.getCameraPosition = function() {
 };
 
 /**
+ * Cancel the camera animation
+ * @return {CameraPosition}
+ */
+Map.prototype.stopAnimation = function() {
+  var self = this;
+  if (self._isReady) {
+    cordova_exec(null, null, self.__pgmId, 'stopAnimation', []);
+  }
+};
+
+/**
  * Remove the map completely.
  */
 Map.prototype.remove = function(callback) {
@@ -679,8 +698,26 @@ Map.prototype.remove = function(callback) {
     value: true,
     writable: false
   });
+  self.stopAnimation();
 
   self.trigger('remove');
+  // var div = self.get('div');
+  // if (div) {
+  //   while (div) {
+  //     if (div.style) {
+  //       div.style.backgroundColor = '';
+  //     }
+  //     if (div.classList) {
+  //       div.classList.remove('_gmaps_cdv_');
+  //     } else if (div.className) {
+  //       div.className = div.className.replace(/_gmaps_cdv_/g, '');
+  //       div.className = div.className.replace(/\s+/g, ' ');
+  //     }
+  //     div = div.parentNode;
+  //   }
+  // }
+  // self.set('div', undefined);
+
 
   // Close the active infoWindow
   var active_marker = self.get('active_marker');
@@ -794,6 +831,11 @@ Map.prototype.setDiv = function(div) {
     }
     div.insertBefore(self._layers.info, div.firstChild);
 
+    // Webkit redraw mandatory
+    // http://stackoverflow.com/a/3485654/697856
+    // div.style.display = 'none';
+    // div.offsetHeight;
+    // div.style.display = '';
     document.body.style.transform = 'rotateZ(0deg)';
 
     self.set('div', div);
@@ -1118,12 +1160,21 @@ Map.prototype.addTileOverlay = function(tilelayerOptions, callback) {
     if (url instanceof Promise) {
       common.promiseTimeout(5000, url)
         .then(function(finalUrl) {
+
+          var link = document.createElement('a');
+          link.href = finalUrl;
+          finalUrl = link.protocol+'//'+link.host+link.pathname + link.search;
+
           cordova_exec(null, self.errorHandler, self.__pgmId + '-tileoverlay', 'onGetTileUrlFromJS', [hashCode, params.key, finalUrl]);
         })
         .catch(function() {
           cordova_exec(null, self.errorHandler, self.__pgmId + '-tileoverlay', 'onGetTileUrlFromJS', [hashCode, params.key, '(null)']);
         });
     } else {
+
+      var link = document.createElement('a');
+      link.href = url;
+      url = link.protocol+'//'+link.host+link.pathname + link.search;
       cordova_exec(null, self.errorHandler, self.__pgmId + '-tileoverlay', 'onGetTileUrlFromJS', [hashCode, params.key, url]);
     }
   };
@@ -1265,12 +1316,11 @@ Map.prototype.addCircle = function(circleOptions, callback) {
   });
 
   self.exec.call(self, function() {
-    if (circle) {
-      circle._privateInitialize();
-      delete circle._privateInitialize;
-      if (typeof callback === 'function') {
-        callback.call(self, circle);
-      }
+    circle._privateInitialize();
+    delete circle._privateInitialize;
+
+    if (typeof callback === 'function') {
+      callback.call(self, circle);
     }
   }, self.errorHandler, self.__pgmId, 'loadPlugin', ['Circle', circleOptions, circle.hashCode]);
 
@@ -1289,10 +1339,25 @@ Map.prototype.addMarker = function(markerOptions, callback) {
   // Generate a makrer instance at once.
   //------------------------------------
   markerOptions.icon = markerOptions.icon || {};
-  if (typeof markerOptions.icon === 'string' || Array.isArray(markerOptions.icon)) {
-    markerOptions.icon = {
-      url: markerOptions.icon
-    };
+  var link;
+  if (typeof markerOptions.icon === 'string') {
+    if (markerOptions.icon.indexOf('://') === -1 &&
+        markerOptions.icon.indexOf('.') === 0) {
+
+      link = document.createElement('a');
+      link.href = markerOptions.icon;
+      markerOptions.icon = link.protocol+'//'+link.host+link.pathname + link.search;
+      link = undefined;
+    }
+  } else if (typeof markerOptions.icon === 'object' && typeof markerOptions.icon.url === 'string') {
+    if (markerOptions.icon.url.indexOf('://') === -1 &&
+        markerOptions.icon.url.indexOf('.') === 0) {
+
+      link = document.createElement('a');
+      link.href = markerOptions.icon.url;
+      markerOptions.icon.url = link.protocol+'//'+link.host+link.pathname + link.search;
+      link = undefined;
+    }
   }
 
   var marker = new Marker(self, markerOptions, exec);
@@ -1307,23 +1372,28 @@ Map.prototype.addMarker = function(markerOptions, callback) {
     marker = undefined;
   });
 
+  if (typeof markerOptions.anchor === 'object' &&
+      'x' in markerOptions.anchor && 'y' in markerOptions.anchor) {
+    markerOptions.anchor = [markerOptions.anchor.x, markerOptions.anchor.y];
+  }
+
   self.exec.call(self, function(result) {
-   if (marker) {
-     markerOptions.icon.size = markerOptions.icon.size || {};
-     markerOptions.icon.size.width = markerOptions.icon.size.width || result.width;
-     markerOptions.icon.size.height = markerOptions.icon.size.height || result.height;
-     markerOptions.icon.anchor = markerOptions.icon.anchor || [markerOptions.icon.size.width / 2, markerOptions.icon.size.height];
+    if (marker) {
+      markerOptions.icon.size = markerOptions.icon.size || {};
+      markerOptions.icon.size.width = markerOptions.icon.size.width || result.width;
+      markerOptions.icon.size.height = markerOptions.icon.size.height || result.height;
+      markerOptions.icon.anchor = markerOptions.icon.anchor || [markerOptions.icon.size.width / 2, markerOptions.icon.size.height];
 
-     if (!markerOptions.infoWindowAnchor) {
-       markerOptions.infoWindowAnchor = [markerOptions.icon.size.width / 2, 0];
-     }
-     marker._privateInitialize(markerOptions);
-     delete marker._privateInitialize;
+      if (!markerOptions.infoWindowAnchor) {
+        markerOptions.infoWindowAnchor = [markerOptions.icon.size.width / 2, 0];
+      }
+      marker._privateInitialize(markerOptions);
+      delete marker._privateInitialize;
 
-     if (typeof callback === 'function') {
-       callback.call(self, marker);
-     }
-   }
+      if (typeof callback === 'function') {
+        callback.call(self, marker);
+      }
+    }
   }, self.errorHandler, self.__pgmId, 'loadPlugin', ['Marker', markerOptions, marker.hashCode]);
 
   return marker;
@@ -1516,6 +1586,17 @@ Map.prototype._onCameraEvent = function(eventName, cameraPosition) {
   if (this._isReady) {
     this.trigger(eventName, cameraPosition, this);
   }
+};
+
+Map.prototype.setClickablePOI = function(isClickable) {
+  var self = this;
+  isClickable = common.parseBoolean(isClickable);
+  self.set('clickablePOI', isClickable);
+  self.exec.call(self, null, self.errorHandler, this.__pgmId, 'setClickablePOI', [isClickable]);
+  return this;
+};
+Map.prototype.getClickablePOI = function() {
+  return this.get('clickablePOI');
 };
 
 module.exports = Map;

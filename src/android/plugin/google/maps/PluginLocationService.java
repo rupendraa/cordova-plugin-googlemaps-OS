@@ -9,8 +9,8 @@ import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Looper;
-import androidx.annotation.NonNull;
-import androidx.core.content.PermissionChecker;
+import android.support.annotation.NonNull;
+import android.support.v4.content.PermissionChecker;
 import android.util.Log;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -20,11 +20,7 @@ import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.tasks.OnSuccessListener;
-import com.google.android.gms.common.api.PendingResult;
-import com.google.android.gms.common.api.Status;
-import com.google.android.gms.location.LocationListener;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
@@ -460,6 +456,7 @@ public class PluginLocationService extends CordovaPlugin {
     if (enableHighAccuracy || "Genymotion".equals(Build.MANUFACTURER)) {
       priority = LocationRequest.PRIORITY_HIGH_ACCURACY;
     }
+
     if (!isRetry) {
       LocationServices.getFusedLocationProviderClient(cordova.getActivity())
         .getLastLocation()
@@ -521,46 +518,46 @@ public class PluginLocationService extends CordovaPlugin {
         .setExpirationDuration(12000)
         .setMaxWaitTime(5000);
 
-    final PendingResult<Status> result =  LocationServices.FusedLocationApi.requestLocationUpdates(
-        googleApiClient, locationRequest, new LocationListener() {
-
+    LocationServices.getFusedLocationProviderClient(cordova.getActivity()).requestLocationUpdates(locationRequest, new LocationCallback() {
           @Override
-          public void onLocationChanged(Location location) {
-            JSONObject result;
-            try {
-              result = PluginUtil.location2Json(location);
-              result.put("status", true);
-              callbackContext.success(result);
-            } catch (JSONException e) {
-              e.printStackTrace();
+          public void onLocationResult(LocationResult locationResult) {
+            Log.d(TAG, "---->onLocationResult");
+            Location location = null;
+            if (locationResult.getLocations().size() > 0) {
+              location = locationResult.getLocations().get(0);
+              lastLocation = location;
+            } else if (locationResult.getLastLocation() != null) {
+              location = locationResult.getLastLocation();
+            }
+
+            Log.d(TAG, "===> location =" + location);
+            if (location != null) {
+              JSONObject result;
+              Log.d(TAG, "===> location =" + callbackContext.getCallbackId());
+              try {
+                result = PluginUtil.location2Json(location);
+                result.put("status", true);
+                callbackContext.success(result);
+              } catch (JSONException e) {
+                e.printStackTrace();
+              }
+            } else {
+              // Send back the error result
+              JSONObject result = new JSONObject();
+              try {
+                result.put("status", false);
+                result.put("error_code", "cannot_detect");
+                result.put("error_message", PluginUtil.getPgmStrings(activity,"pgm_can_not_get_location"));
+              } catch (JSONException e) {
+                e.printStackTrace();
+              }
+              callbackContext.error(result);
             }
 
             googleApiClient.disconnect();
           }
+        }, Looper.myLooper());
 
-        });
-
-    result.setResultCallback(new ResultCallback<Status>() {
-
-      public void onResult(Status status) {
-        if (!status.isSuccess()) {
-          String errorMsg = status.getStatusMessage();
-          PluginResult result = new PluginResult(PluginResult.Status.ERROR, errorMsg);
-          callbackContext.sendPluginResult(result);
-        } else {
-          // Send back the error result
-          JSONObject result = new JSONObject();
-          try {
-            result.put("status", false);
-            result.put("error_code", "cannot_detect");
-            result.put("error_message", PluginUtil.getPgmStrings(activity,"pgm_can_not_get_location"));
-          } catch (JSONException e) {
-            e.printStackTrace();
-          }
-          callbackContext.error(result);
-        }
-      }
-    });
   }
 
   private void _onActivityResultLocationPage(Bundle bundle) {

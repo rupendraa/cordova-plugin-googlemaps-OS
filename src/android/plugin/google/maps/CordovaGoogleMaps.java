@@ -473,7 +473,7 @@ public class CordovaGoogleMaps extends CordovaPlugin implements ViewTreeObserver
 
     pluginStreetView.mapCtrl = CordovaGoogleMaps.this;
     pluginStreetView.self = pluginStreetView;
-
+    
     pluginStreetView.getPanorama(args, callbackContext);
   }
 
