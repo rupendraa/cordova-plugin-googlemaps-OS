@@ -227,6 +227,7 @@ android {
   if (useAndroidX) {
     dependencies {
       implementation 'com.google.android.libraries.maps:maps:3.1.0-beta'
+      implementation 'com.android.volley:volley:1.2.0'
       implementation 'com.android.support:multidex:1.0.3'
     }
 
