@@ -9,4 +9,6 @@
 #import <Foundation/Foundation.h>
 
 @protocol IPluginView <NSObject>
+- (void)attachToWebView:(CDVInvokedUrlCommand*)command;
+- (void)detachFromWebView:(CDVInvokedUrlCommand*)command;
 @end

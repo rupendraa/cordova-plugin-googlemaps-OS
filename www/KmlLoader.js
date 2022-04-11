@@ -86,7 +86,7 @@ KmlLoader.prototype.parseKmlFile = function(callback) {
       //result.set('kmlData', rawKmlData);
       callback.call(self, self.camera, result);
     });
-  }, self.map.errorHandler, 'PluginMap', 'loadPlugin', [self.map.__pgmId, 'KmlOverlay', {
+  }, self.map.errorHandler, self.map.__pgmId, 'loadPlugin', ['KmlOverlay', {
     url: self.options.url
   }], {sync: true});
 };

@@ -6,31 +6,21 @@
 //
 //
 
-#if __has_include("CapacitorCordova.h")
-  #define PGM_PLATFORM_CAPACITOR
-#else
-  #define PGM_PLATFORM_CORDOVA
-#endif
-
-
 #ifndef MIN
-  #import <NSObjCRuntime.h>
+#import <NSObjCRuntime.h>
 #endif
 #import <Foundation/Foundation.h>
 #import <Cordova/CDV.h>
-
-#ifdef PGM_PLATFORM_CORDOVA
-  #import "MainViewController.h"
-#endif
-
+#import "MainViewController.h"
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
+//#import "MFGoogleMapAdditions/GMSCoordinateBounds+Geometry.h"
+#import "GMSCoordinateBounds+Geometry.h"
 #import <math.h>
 #import "IPluginProtocol.h"
 #import "PluginViewController.h"
 #import <Cordova/CDVCommandDelegate.h>
 #import <Cordova/CDVCommandDelegateImpl.h>
-#import "UIImageCache.h"
 
 typedef void (^MYCompletionHandler)(NSError *error);
 
@@ -60,11 +50,15 @@ typedef void (^MYCompletionHandler)(NSError *error);
 - (UIImage *)resize:(CGFloat)width height:(CGFloat)height;
 @end
 
+@interface CDVCommandDelegateImpl (GoogleMapsPlugin)
+- (void)hookSendPluginResult:(CDVPluginResult*)result callbackId:(NSString*)callbackId;
+@end
+
 //
 // animationDidStop for group animation
 // http://stackoverflow.com/a/28051909/697856
 //
-typedef void (^TIFAnimationGroupCompletionBlock)(void);
+typedef void (^TIFAnimationGroupCompletionBlock)();
 @interface CAAnimationGroup (Blocks)
 - (void)setCompletionBlock:(TIFAnimationGroupCompletionBlock)handler;
 @end
@@ -84,7 +78,6 @@ typedef void (^TIFAnimationGroupCompletionBlock)(void);
 + (double)getZoomFromBounds:(GMSCoordinateBounds *)bounds mapWidth:(double)mapWidth mapHeight:(double)mapHeight;
 + (double)_zoom:(double)mapPx worldPx:(double)worldPx fraction:(double)fraction;
 + (double)_latRad:(double)lat;
-+ (void)downloadImageWithURL:(NSURL *)url completionBlock:(void (^)(BOOL succeeded, UIImage *image))completionBlock;
 @end
 
 

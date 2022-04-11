@@ -57,23 +57,22 @@
 
   key = nil;
   keys = nil;
-  
+
   NSString *pluginId = [NSString stringWithFormat:@"%@-tileoverlay", self.mapCtrl.overlayId];
-  [self.mapCtrl.plugins removeObjectForKey:pluginId];
+  CDVViewController *cdvViewController = (CDVViewController*)self.viewController;
+  [cdvViewController.pluginObjects removeObjectForKey:pluginId];
+  [cdvViewController.pluginsMap setValue:nil forKey:pluginId];
+  pluginId = nil;
 }
 
--(PluginTileOverlay *)_getInstance: (NSString *)mapId {
-  NSString *pluginId = [NSString stringWithFormat:@"%@-tileoverlay", mapId];
-  PluginMap *mapInstance = [CordovaGoogleMaps getViewPlugin:mapId];
-  return [mapInstance.mapCtrl.plugins objectForKey:pluginId];
-}
 -(void)create:(CDVInvokedUrlCommand *)command
 {
-  
+
+
   dispatch_async(dispatch_get_main_queue(), ^{
 
-      NSDictionary *json = [command.arguments objectAtIndex:2];
-      NSString *idBase = [command.arguments objectAtIndex:3];
+      NSDictionary *json = [command.arguments objectAtIndex:1];
+      NSString *idBase = [command.arguments objectAtIndex:2];
       //NSString *tileUrlFormat = [json objectForKey:@"tileUrlFormat"];
 
 
@@ -83,8 +82,10 @@
       //NSRange range = [tileUrlFormat rangeOfString:@"http"];
       //if (range.location != 0) {
           NSMutableDictionary *options = [[NSMutableDictionary alloc] init];
-    
-          NSURL *url = [(WKWebView *)self.webView URL];
+
+          CDVViewController *cdvViewController = (CDVViewController*)self.viewController;
+          id webview = cdvViewController.webView;
+          NSURL *url = [webview URL];
           NSString *webPageUrl = url.absoluteString;
           [options setObject:webPageUrl forKey:@"webPageUrl"];
           [options setObject:self.mapCtrl.overlayId forKey:@"mapId"];
@@ -94,7 +95,7 @@
           [options setObject:[json objectForKey:@"tileSize"] forKey:@"tileSize"];
           [options setObject:[json objectForKey:@"debug"] forKey:@"debug"];
 
-          layer = [[PluginTileProvider alloc] initWithOptions:options webView:self.webView];
+          layer = [[PluginTileProvider alloc] initWithOptions:options webView:webview];
       /*
   } else {
           GMSTileURLConstructor constructor = ^(NSUInteger x, NSUInteger y, NSUInteger zoom) {
@@ -103,6 +104,7 @@
               urlStr = [urlStr stringByReplacingOccurrencesOfString:@"<zoom>" withString:[NSString stringWithFormat:@"%lu", (unsigned long)zoom]];
               return [NSURL URLWithString:urlStr];
           };
+
           layer = [GMSURLTileLayer tileLayerWithURLConstructor:constructor];
       }
        */
@@ -140,22 +142,18 @@
           [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
       }];
   });
-
 }
 
 
 -(void)onGetTileUrlFromJS:(CDVInvokedUrlCommand *)command
 {
-  
-  NSString *pluginId = [command.arguments objectAtIndex:0];
-  PluginTileOverlay *tOverlayInstance = [self _getInstance:pluginId];
 
-  [tOverlayInstance.executeQueue addOperationWithBlock:^{
-    NSString *_id = [command.arguments objectAtIndex:1];
-    NSString *urlKey = [command.arguments objectAtIndex:2];
-    NSString *tileUrl = [command.arguments objectAtIndex:3];
+  [self.executeQueue addOperationWithBlock:^{
+    NSString *_id = [command.arguments objectAtIndex:0];
+    NSString *urlKey = [command.arguments objectAtIndex:1];
+    NSString *tileUrl = [command.arguments objectAtIndex:2];
     NSString *pluginId = [NSString stringWithFormat:@"tileoverlay_%@", _id];
-    GMSTileLayer *tileLayer = [tOverlayInstance.mapCtrl.objects objectForKey:pluginId];
+    GMSTileLayer *tileLayer = [self.mapCtrl.objects objectForKey:pluginId];
 
 
     CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
@@ -163,61 +161,55 @@
         PluginTileProvider *localLayer =(PluginTileProvider *)tileLayer;
         [localLayer onGetTileUrlFromJS:urlKey tileUrl:tileUrl];
     }
-    [tOverlayInstance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 
   }];
 }
 
 /**
  * Set visibility
+ * @params key
  */
 -(void)setVisible:(CDVInvokedUrlCommand *)command
 {
-  
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginTileOverlay *tOverlayInstance = [self _getInstance:mapId];
 
-  [tOverlayInstance.executeQueue addOperationWithBlock:^{
-      NSString *tileLayerKey = [command.arguments objectAtIndex:1];
-      GMSTileLayer *layer = (GMSTileLayer *)[tOverlayInstance.mapCtrl.objects objectForKey:tileLayerKey];
-    
-      Boolean isVisible = [[command.arguments objectAtIndex:2] boolValue];
+  [self.executeQueue addOperationWithBlock:^{
+      NSString *tileLayerKey = [command.arguments objectAtIndex:0];
+      GMSTileLayer *layer = (GMSTileLayer *)[self.mapCtrl.objects objectForKey:tileLayerKey];
+      Boolean isVisible = [[command.arguments objectAtIndex:1] boolValue];
       dispatch_async(dispatch_get_main_queue(), ^{
           if (isVisible) {
             layer.map = self.mapCtrl.map;
           } else {
             layer.map = nil;
           }
-      });
 
-      CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-      [tOverlayInstance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+          CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+          [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+      });
   }];
 }
 
 
 /**
  * Remove the tile overlay
- * 
+ * @params key
  */
 -(void)remove:(CDVInvokedUrlCommand *)command
 {
-  
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginTileOverlay *tOverlayInstance = [self _getInstance:mapId];
 
-  [tOverlayInstance.executeQueue addOperationWithBlock:^{
-      NSString *tileLayerKey = [command.arguments objectAtIndex:1];
+  [self.executeQueue addOperationWithBlock:^{
+      NSString *tileLayerKey = [command.arguments objectAtIndex:0];
       dispatch_async(dispatch_get_main_queue(), ^{
-          GMSTileLayer *layer = (GMSTileLayer *)[tOverlayInstance.mapCtrl.objects objectForKey:tileLayerKey];
+          GMSTileLayer *layer = (GMSTileLayer *)[self.mapCtrl.objects objectForKey:tileLayerKey];
           layer.map = nil;
           [layer clearTileCache];
-          [tOverlayInstance.mapCtrl.objects removeObjectForKey:tileLayerKey];
+          [self.mapCtrl.objects removeObjectForKey:tileLayerKey];
           layer = nil;
       });
 
       CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-      [tOverlayInstance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+      [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
   }];
 
 }
@@ -225,45 +217,39 @@
 
 /**
  * Set z-index
- * 
+ * @params key
  */
 -(void)setZIndex:(CDVInvokedUrlCommand *)command
 {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginTileOverlay *tOverlayInstance = [self _getInstance:mapId];
-
-  [tOverlayInstance.executeQueue addOperationWithBlock:^{
-      NSString *tileLayerKey = [command.arguments objectAtIndex:1];
-      GMSTileLayer *layer = (GMSTileLayer *)[tOverlayInstance.mapCtrl.objects objectForKey:tileLayerKey];
-      NSInteger zIndex = [[command.arguments objectAtIndex:2] integerValue];
+  [self.executeQueue addOperationWithBlock:^{
+      NSString *tileLayerKey = [command.arguments objectAtIndex:0];
+      GMSTileLayer *layer = (GMSTileLayer *)[self.mapCtrl.objects objectForKey:tileLayerKey];
+      NSInteger zIndex = [[command.arguments objectAtIndex:1] integerValue];
       dispatch_async(dispatch_get_main_queue(), ^{
           [layer setZIndex:(int)zIndex];
-      });
 
-      CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-      [tOverlayInstance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+          CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+          [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+      });
   }];
 }
 /**
  * Set fadeIn
- * 
+ * @params key
  */
 -(void)setFadeIn:(CDVInvokedUrlCommand *)command
 {
-  
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginTileOverlay *tOverlayInstance = [self _getInstance:mapId];
 
-  [tOverlayInstance.executeQueue addOperationWithBlock:^{
-      NSString *tileLayerKey = [command.arguments objectAtIndex:1];
-      GMSTileLayer *layer = (GMSTileLayer *)[tOverlayInstance.mapCtrl.objects objectForKey:tileLayerKey];
-      Boolean isEnabled = [[command.arguments objectAtIndex:2] boolValue];
+  [self.executeQueue addOperationWithBlock:^{
+      NSString *tileLayerKey = [command.arguments objectAtIndex:0];
+      GMSTileLayer *layer = (GMSTileLayer *)[self.mapCtrl.objects objectForKey:tileLayerKey];
+      Boolean isEnabled = [[command.arguments objectAtIndex:1] boolValue];
       dispatch_async(dispatch_get_main_queue(), ^{
           [layer setFadeIn:isEnabled];
-      });
 
-      CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-      [tOverlayInstance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+          CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+          [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+      });
   }];
 
 }
@@ -271,24 +257,21 @@
 
 /**
  * Set opacity
- * 
+ * @params key
  */
 -(void)setOpacity:(CDVInvokedUrlCommand *)command
 {
-  
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginTileOverlay *tOverlayInstance = [self _getInstance:mapId];
 
-  [tOverlayInstance.executeQueue addOperationWithBlock:^{
-      NSString *tileLayerKey = [command.arguments objectAtIndex:1];
-      GMSTileLayer *layer = (GMSTileLayer *)[tOverlayInstance.mapCtrl.objects objectForKey:tileLayerKey];
-      double opacity = [[command.arguments objectAtIndex:2] doubleValue];
+  [self.executeQueue addOperationWithBlock:^{
+      NSString *tileLayerKey = [command.arguments objectAtIndex:0];
+      GMSTileLayer *layer = (GMSTileLayer *)[self.mapCtrl.objects objectForKey:tileLayerKey];
+      double opacity = [[command.arguments objectAtIndex:1] doubleValue];
       dispatch_async(dispatch_get_main_queue(), ^{
           [layer setOpacity:opacity];
-      });
 
-      CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-      [tOverlayInstance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+          CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+          [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+      });
 
   }];
 }

@@ -10,7 +10,6 @@
 
 @implementation PluginMap
 
-
 -(void)setPluginViewController:(PluginViewController *)viewCtrl
 {
   self.mapCtrl = (PluginMapViewController *)viewCtrl;
@@ -18,16 +17,21 @@
 
 - (void)pluginInitialize
 {
-  // Initialize this plugin
-  if (self.initialized) return;
+  if (self.mapCtrl.objects) {
+    return;
+  }
   self.initialized = YES;
-  
+  // Initialize this plugin
 }
 
 - (void)pluginUnload
 {
   // Plugin destroy
   self.isRemoved = YES;
+
+  // Load the GoogleMap.m
+  //CDVViewController *cdvViewController = (CDVViewController*)self.viewController;
+  //CordovaGoogleMaps *googlemaps = [cdvViewController getCommandInstance:@"CordovaGoogleMaps"];
 
   [self clear:nil];
 
@@ -53,44 +57,53 @@
 
 }
 - (void)loadPlugin:(CDVInvokedUrlCommand*)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-
-  NSString *className = [command.arguments objectAtIndex:1];
+  NSString *className = [command.arguments objectAtIndex:0];
   NSString *pluginName = [NSString stringWithFormat:@"%@", className];
   className = [NSString stringWithFormat:@"Plugin%@", className];
 
-  @synchronized (instance.mapCtrl.plugins) {
+  @synchronized (self.mapCtrl.plugins) {
 
     CDVPluginResult* pluginResult = nil;
     CDVPlugin<IPluginProtocol> *plugin;
-    NSString *pluginId = [NSString stringWithFormat:@"%@-%@", instance.mapCtrl.overlayId, [pluginName lowercaseString]];
-    
+    NSString *pluginId = [NSString stringWithFormat:@"%@-%@", self.mapCtrl.overlayId, [pluginName lowercaseString]];
 
-
-    plugin = [instance.mapCtrl.plugins objectForKey:pluginId];
+    plugin = [self.mapCtrl.plugins objectForKey:pluginId];
     if (!plugin) {
-      SEL selInitWith = NSSelectorFromString(@"initWithWebViewEngine:");
-      plugin = [[NSClassFromString(className)alloc] performSelector:selInitWith withObject:self.webViewEngine];
+      plugin = [[NSClassFromString(className)alloc] init];
 
       if (!plugin) {
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR
                                          messageAsString:[NSString stringWithFormat:@"Class not found: %@", className]];
-        [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
         return;
       }
-      
-      [plugin setViewController: instance.mapCtrl];
-      [plugin setCommandDelegate: instance.commandDelegate];
+
+      // Hack:
+      // In order to load the plugin instance of the same class but different names,
+      // register the map plugin instance into the pluginObjects directly.
+      //
+      // Don't use the registerPlugin() method of the CDVViewController.
+      // Problem is at
+      // https://github.com/apache/cordova-ios/blob/582e35776f01ee03f32f0986de181bcf5eb4d232/CordovaLib/Classes/Public/CDVViewController.m#L577
+      //
+      CDVViewController *cdvViewController = (CDVViewController*)self.viewController;
+      if ([plugin respondsToSelector:@selector(setViewController:)]) {
+        [plugin setViewController:cdvViewController];
+      }
+      if ([plugin respondsToSelector:@selector(setCommandDelegate:)]) {
+        [plugin setCommandDelegate:cdvViewController.commandDelegate];
+      }
+      [cdvViewController.pluginObjects setObject:plugin forKey:pluginId];
+      [cdvViewController.pluginsMap setValue:pluginId forKey:pluginId];
       [plugin pluginInitialize];
 
-//      NSLog(@"--->loadPlugin : %@ className : %@, plugin : %@", pluginId, className, plugin);
-      [instance.mapCtrl.plugins setObject:plugin forKey: pluginId];
-      [plugin setPluginViewController: instance.mapCtrl];
+      //NSLog(@"--->loadPlugin : %@ className : %@, plugin : %@", pluginId, className, plugin);
+      [self.mapCtrl.plugins setObject:plugin forKey:pluginId];
+      [plugin setPluginViewController:self.mapCtrl];
 
-      plugin.commandDelegate = instance.commandDelegate;
     }
 
+    //plugin.commandDelegate = self.commandDelegate;
 
 
     SEL selector = NSSelectorFromString(@"create:");
@@ -99,7 +112,7 @@
     } else {
       pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR
                                        messageAsString:[NSString stringWithFormat:@"method not found: %@ in %@ class", @"create", className]];
-      [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+      [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
     }
   }
 }
@@ -134,19 +147,107 @@
 
 }
 
+
+- (void)setDiv:(CDVInvokedUrlCommand *)command {
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+
+    // Load the GoogleMap.m
+    CDVViewController *cdvViewController = (CDVViewController*)self.viewController;
+    CordovaGoogleMaps *googlemaps = [cdvViewController getCommandInstance:@"CordovaGoogleMaps"];
+
+    // Detach the map view
+    if ([command.arguments count] == 0) {
+      [googlemaps.pluginLayer removePluginOverlay:self.mapCtrl];
+      self.mapCtrl.attached = NO;
+      self.mapCtrl.view = nil;
+    } else {
+      self.mapCtrl.view = self.mapCtrl.map;
+      [googlemaps.pluginLayer addPluginOverlay:self.mapCtrl];
+      NSString *mapDivId = [command.arguments objectAtIndex:0];
+      self.mapCtrl.divId = mapDivId;
+      self.mapCtrl.attached = YES;
+      self.mapCtrl.isRenderedAtOnce = NO; //prevent unexpected animation
+      [googlemaps.pluginLayer updateViewPosition:self.mapCtrl];
+    }
+    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+  }];
+}
+
+- (void)attachToWebView:(CDVInvokedUrlCommand*)command {
+  [self.mapCtrl.executeQueue addOperationWithBlock:^{
+
+    // Load the GoogleMap.m
+    CDVViewController *cdvViewController = (CDVViewController*)self.viewController;
+    CordovaGoogleMaps *googlemaps = [cdvViewController getCommandInstance:@"CordovaGoogleMaps"];
+    [googlemaps.pluginLayer addPluginOverlay:self.mapCtrl];
+    self.mapCtrl.attached = YES;
+
+    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+  }];
+}
+
+- (void)detachFromWebView:(CDVInvokedUrlCommand*)command {
+
+  [self.mapCtrl.executeQueue addOperationWithBlock:^{
+
+    // Load the GoogleMap.m
+    CDVViewController *cdvViewController = (CDVViewController*)self.viewController;
+    CordovaGoogleMaps *googlemaps = [cdvViewController getCommandInstance:@"CordovaGoogleMaps"];
+    [googlemaps.pluginLayer removePluginOverlay:self.mapCtrl];
+    self.mapCtrl.attached = NO;
+
+    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+  }];
+
+}
+
+- (void)resizeMap:(CDVInvokedUrlCommand *)command {
+  [self.mapCtrl.executeQueue addOperationWithBlock:^{
+
+    NSString *mapDivId = self.mapCtrl.divId;
+    if (!mapDivId) {
+      CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+      [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+      return;
+    }
+
+    // Load the GoogleMap.m
+    CDVViewController *cdvViewController = (CDVViewController*)self.viewController;
+    CordovaGoogleMaps *googlemaps = [cdvViewController getCommandInstance:@"CordovaGoogleMaps"];
+
+    // Save the map rectangle.
+    if (![googlemaps.pluginLayer.pluginScrollView.HTMLNodes objectForKey:self.mapCtrl.divId]) {
+      NSMutableDictionary *dummyInfo = [[NSMutableDictionary alloc] init];;
+      [dummyInfo setObject:@"{{0,-3000} - {50,50}}" forKey:@"size"];
+      [dummyInfo setObject:[NSNumber numberWithDouble:-999] forKey:@"depth"];
+      [googlemaps.pluginLayer.pluginScrollView.HTMLNodes setObject:dummyInfo forKey:self.mapCtrl.divId];
+    }
+
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [googlemaps.pluginLayer updateViewPosition:self.mapCtrl];
+
+      //[googlemaps.pluginLayer updateViewPosition:self.mapCtrl];
+      CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+      [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    });
+
+  }];
+}
+
 -(void)setClickable:(CDVInvokedUrlCommand *)command
 {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  [instance.mapCtrl.executeQueue addOperationWithBlock:^{
+  [self.mapCtrl.executeQueue addOperationWithBlock:^{
     Boolean isClickable = [[command.arguments objectAtIndex:0] boolValue];
-    instance.mapCtrl.clickable = isClickable;
+    self.mapCtrl.clickable = isClickable;
     //self.debugView.clickable = isClickable;
     //[self.pluginScrollView.debugView setNeedsDisplay];
 
     CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-    [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
   }];
 }
 
@@ -154,28 +255,30 @@
  * Clear all markups
  */
 - (void)clear:(CDVInvokedUrlCommand *)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
   dispatch_async(dispatch_get_main_queue(), ^{
-    CDVPlugin<IPluginProtocol> *plugin;
-    NSString *pluginName;
-    NSArray *keys = [instance.mapCtrl.plugins allKeys];
-    for (int j = 0; j < [keys count]; j++) {
-      pluginName = [keys objectAtIndex:j];
-      plugin = [instance.mapCtrl.plugins objectForKey:pluginName];
-      [plugin pluginUnload];
-
-    }
-
-    [instance.mapCtrl.plugins removeAllObjects];
-
-    [instance.mapCtrl.map clear];
+    [self.mapCtrl.map clear];
   });
+
+
+  CDVViewController *cdvViewController = (CDVViewController*)self.viewController;
+  CDVPlugin<IPluginProtocol> *plugin;
+  NSString *pluginName;
+  NSArray *keys = [self.mapCtrl.plugins allKeys];
+  for (int j = 0; j < [keys count]; j++) {
+    pluginName = [keys objectAtIndex:j];
+    plugin = [self.mapCtrl.plugins objectForKey:pluginName];
+    [plugin pluginUnload];
+
+    [cdvViewController.pluginObjects removeObjectForKey:pluginName];
+    [cdvViewController.pluginsMap setValue:nil forKey:pluginName];
+    //plugin = nil;
+  }
+
+  [self.mapCtrl.plugins removeAllObjects];
 
   if (command != (id)[NSNull null]) {
     CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-    [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 
   }
 }
@@ -184,131 +287,119 @@
  * Move the center of the map
  */
 - (void)setCameraTarget:(CDVInvokedUrlCommand *)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
 
-  [instance.mapCtrl.executeQueue addOperationWithBlock:^{
-    NSDictionary *params = [command.arguments objectAtIndex:1];
-    
-    float latitude = [[params objectForKey:@"lat"] floatValue];
-    float longitude = [[params objectForKey:@"lng"] floatValue];
+  [self.mapCtrl.executeQueue addOperationWithBlock:^{
+    float latitude = [[command.arguments objectAtIndex:0] floatValue];
+    float longitude = [[command.arguments objectAtIndex:1] floatValue];
 
     [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-      [instance.mapCtrl.map animateToLocation:CLLocationCoordinate2DMake(latitude, longitude)];
+      [self.mapCtrl.map animateToLocation:CLLocationCoordinate2DMake(latitude, longitude)];
     }];
 
     CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-    [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
   }];
 }
 
 - (void)setMyLocationEnabled:(CDVInvokedUrlCommand *)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  NSDictionary *params =[command.arguments objectAtIndex:1];
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+    NSDictionary *params =[command.arguments objectAtIndex:0];
 
-  instance.mapCtrl.map.settings.myLocationButton = [[params valueForKey:@"myLocationButton"] boolValue];
-  instance.mapCtrl.map.myLocationEnabled = [[params valueForKey:@"myLocation"] boolValue];
+    self.mapCtrl.map.settings.myLocationButton = [[params valueForKey:@"myLocationButton"] boolValue];
+    self.mapCtrl.map.myLocationEnabled = [[params valueForKey:@"myLocation"] boolValue];
+  }];
 
   CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-  [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+  [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void)setIndoorEnabled:(CDVInvokedUrlCommand *)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  Boolean isEnabled = [[command.arguments objectAtIndex:1] boolValue];
-  instance.mapCtrl.map.settings.indoorPicker = isEnabled;
-  instance.mapCtrl.map.indoorEnabled = isEnabled;
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+    Boolean isEnabled = [[command.arguments objectAtIndex:0] boolValue];
+    self.mapCtrl.map.settings.indoorPicker = isEnabled;
+    self.mapCtrl.map.indoorEnabled = isEnabled;
+  }];
 
   CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-  [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+  [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void)setTrafficEnabled:(CDVInvokedUrlCommand *)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  Boolean isEnabled = [[command.arguments objectAtIndex:1] boolValue];
-  instance.mapCtrl.map.trafficEnabled = isEnabled;
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+    Boolean isEnabled = [[command.arguments objectAtIndex:0] boolValue];
+    self.mapCtrl.map.trafficEnabled = isEnabled;
+  }];
 
   CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-  [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+  [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void)setCompassEnabled:(CDVInvokedUrlCommand *)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
 
-  Boolean isEnabled = [[command.arguments objectAtIndex:1] boolValue];
-  instance.mapCtrl.map.settings.compassButton = isEnabled;
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+    Boolean isEnabled = [[command.arguments objectAtIndex:0] boolValue];
+    self.mapCtrl.map.settings.compassButton = isEnabled;
+  }];
 
   CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-  [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+  [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 - (void)setVisible:(CDVInvokedUrlCommand *)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  BOOL isVisible = [[command.arguments objectAtIndex:1] boolValue];
-  [instance.mapCtrl.view setHidden:!isVisible];
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+    BOOL isVisible = [[command.arguments objectAtIndex:0] boolValue];
+    [self.mapCtrl.view setHidden:!isVisible];
+  }];
 
   CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-  [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+  [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void)setCameraTilt:(CDVInvokedUrlCommand *)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+    double angle = [[command.arguments objectAtIndex:0] doubleValue];
+    if (angle >=0 && angle <= 90) {
+      GMSCameraPosition *camera = self.mapCtrl.map.camera;
+      camera = [GMSCameraPosition cameraWithLatitude:camera.target.latitude
+                                           longitude:camera.target.longitude
+                                                zoom:camera.zoom
+                                             bearing:camera.bearing
+                                        viewingAngle:angle];
 
-  double angle = [[command.arguments objectAtIndex:1] doubleValue];
-  if (angle >=0 && angle <= 90) {
-    GMSCameraPosition *camera = instance.mapCtrl.map.camera;
-    camera = [GMSCameraPosition cameraWithLatitude:camera.target.latitude
-                                         longitude:camera.target.longitude
-                                              zoom:camera.zoom
-                                           bearing:camera.bearing
-                                      viewingAngle:angle];
-
-      [instance.mapCtrl.map setCamera:camera];
-  }
+        [self.mapCtrl.map setCamera:camera];
+    }
 
 
-  CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-  [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+  }];
 }
 
 - (void)setCameraBearing:(CDVInvokedUrlCommand *)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  double bearing = [[command.arguments objectAtIndex:1] doubleValue];
-  GMSCameraPosition *camera = instance.mapCtrl.map.camera;
-  camera = [GMSCameraPosition cameraWithLatitude:camera.target.latitude
-                                       longitude:camera.target.longitude
-                                            zoom:camera.zoom
-                                         bearing:bearing
-                                    viewingAngle:camera.viewingAngle];
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+    double bearing = [[command.arguments objectAtIndex:0] doubleValue];
+    GMSCameraPosition *camera = self.mapCtrl.map.camera;
+    camera = [GMSCameraPosition cameraWithLatitude:camera.target.latitude
+                                         longitude:camera.target.longitude
+                                              zoom:camera.zoom
+                                           bearing:bearing
+                                      viewingAngle:camera.viewingAngle];
 
 
-  [instance.mapCtrl.map setCamera:camera];
+    [self.mapCtrl.map setCamera:camera];
 
 
-  CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-  [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+  }];
 }
 - (void)setAllGesturesEnabled:(CDVInvokedUrlCommand *)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  Boolean isEnabled = [[command.arguments objectAtIndex:0] boolValue];
-  [instance.mapCtrl.map.settings setAllGesturesEnabled:isEnabled];
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+    Boolean isEnabled = [[command.arguments objectAtIndex:0] boolValue];
+    [self.mapCtrl.map.settings setAllGesturesEnabled:isEnabled];
+  }];
 
   CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-  [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+  [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 
@@ -316,45 +407,36 @@
  * Change the zoom level
  */
 - (void)setCameraZoom:(CDVInvokedUrlCommand *)command {
-  
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  float zoom = [[command.arguments objectAtIndex:0] floatValue];
-  CLLocationCoordinate2D center = [instance.mapCtrl.map.projection coordinateForPoint:instance.mapCtrl.map.center];
-  [instance.mapCtrl.map setCamera:[GMSCameraPosition cameraWithTarget:center zoom:zoom]];
+
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+    float zoom = [[command.arguments objectAtIndex:0] floatValue];
+    CLLocationCoordinate2D center = [self.mapCtrl.map.projection coordinateForPoint:self.mapCtrl.map.center];
+    [self.mapCtrl.map setCamera:[GMSCameraPosition cameraWithTarget:center zoom:zoom]];
+  }];
 
   CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-  [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+  [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 /**
  * Pan by
  */
 - (void)panBy:(CDVInvokedUrlCommand *)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  [instance.mapCtrl.executeQueue addOperationWithBlock:^{
-    NSDictionary *params = [command.arguments objectAtIndex:1];
-    int x = [[params objectForKey:@"x"] intValue];
-    int y = [[params objectForKey:@"y"] intValue];
-    
-    [instance.mapCtrl.map animateWithCameraUpdate:[GMSCameraUpdate scrollByX:x * -1 Y:y * -1]];
-
-    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-    [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+    int x = [[command.arguments objectAtIndex:0] intValue];
+    int y = [[command.arguments objectAtIndex:1] intValue];
+    [self.mapCtrl.map animateWithCameraUpdate:[GMSCameraUpdate scrollByX:x * -1 Y:y * -1]];
   }];
+
+  CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+  [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 /**
  * Change the Map Type
  */
 - (void)setMapTypeId:(CDVInvokedUrlCommand *)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  [instance.mapCtrl.executeQueue addOperationWithBlock:^{
+  [self.mapCtrl.executeQueue addOperationWithBlock:^{
     CDVPluginResult* pluginResult = nil;
 
     NSString *typeStr = [command.arguments objectAtIndex:0];
@@ -366,14 +448,14 @@
                               ^() {return kGMSTypeNone; }, @"MAP_TYPE_NONE",
                               nil];
 
-    typedef GMSMapViewType (^CaseBlock)(void);
+    typedef GMSMapViewType (^CaseBlock)();
     GMSMapViewType mapType;
     CaseBlock caseBlock = mapTypes[typeStr];
     if (caseBlock) {
       // Change the map type
       mapType = caseBlock();
       [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-        instance.mapCtrl.map.mapType = mapType;
+        self.mapCtrl.map.mapType = mapType;
       }];
       pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
     } else {
@@ -382,7 +464,7 @@
                                        messageAsString:[NSString
                                                         stringWithFormat:@"Unknow MapTypeID is specified:%@", typeStr]];
     }
-    [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
   }];
 }
 
@@ -391,10 +473,7 @@
  */
 -(void)animateCamera:(CDVInvokedUrlCommand *)command
 {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  [instance updateCameraPosition:@"animateCamera" command:command];
+  [self updateCameraPosition:@"animateCamera" command:command];
 }
 
 /**
@@ -402,10 +481,7 @@
  */
 -(void)moveCamera:(CDVInvokedUrlCommand *)command
 {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  [instance updateCameraPosition:@"moveCamera" command:command];
+  [self updateCameraPosition:@"moveCamera" command:command];
 }
 
 
@@ -573,121 +649,107 @@
 
 }
 -(void)updateCameraPosition: (NSString*)action command:(CDVInvokedUrlCommand *)command {
-  
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  [instance.mapCtrl.executeQueue addOperationWithBlock:^{
-    NSDictionary *json = [command.arguments objectAtIndex:1];
-    [instance _changeCameraPosition:action requestMethod:@"updateCameraPosition" params:json command:command];
+  [self.mapCtrl.executeQueue addOperationWithBlock:^{
+    NSDictionary *json = [command.arguments objectAtIndex:0];
+    [self _changeCameraPosition:action requestMethod:@"updateCameraPosition" params:json command:command];
   }];
 }
 
 - (void)setActiveMarkerId:(CDVInvokedUrlCommand*)command {
-  
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
 
-  NSString *markerId = [command.arguments objectAtIndex:1];
-  GMSMarker *marker = [instance.mapCtrl.objects objectForKey:markerId];
-  if (marker != (id)[NSNull null]) {
-    instance.mapCtrl.map.selectedMarker = marker;
-    instance.mapCtrl.activeMarker = marker;
-  }
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
 
-  CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-  [(CDVCommandDelegateImpl *)instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    NSString *markerId = [command.arguments objectAtIndex:0];
+    GMSMarker *marker = [self.mapCtrl.objects objectForKey:markerId];
+    if (marker != (id)[NSNull null]) {
+      self.mapCtrl.map.selectedMarker = marker;
+      self.mapCtrl.activeMarker = marker;
+    }
+
+    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+    [(CDVCommandDelegateImpl *)self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+  }];
 }
 
 
 - (void)toDataURL:(CDVInvokedUrlCommand *)command {
-  
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  [instance.mapCtrl.executeQueue addOperationWithBlock:^{
 
-    [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-      NSDictionary *opts = [command.arguments objectAtIndex:1];
-      BOOL uncompress = NO;
-      if ([opts objectForKey:@"uncompress"]) {
-        uncompress = [[opts objectForKey:@"uncompress"] boolValue];
-      }
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+    NSDictionary *opts = [command.arguments objectAtIndex:0];
+    BOOL uncompress = NO;
+    if ([opts objectForKey:@"uncompress"]) {
+      uncompress = [[opts objectForKey:@"uncompress"] boolValue];
+    }
 
-      if (uncompress) {
-        UIGraphicsBeginImageContextWithOptions(instance.mapCtrl.view.frame.size, NO, 0.0f);
-      } else {
-        UIGraphicsBeginImageContext(instance.mapCtrl.view.frame.size);
-      }
-      [instance.mapCtrl.view drawViewHierarchyInRect:instance.mapCtrl.map.layer.bounds afterScreenUpdates:NO];
-      UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
-      UIGraphicsEndImageContext();
+    if (uncompress) {
+      UIGraphicsBeginImageContextWithOptions(self.mapCtrl.view.frame.size, NO, 0.0f);
+    } else {
+      UIGraphicsBeginImageContext(self.mapCtrl.view.frame.size);
+    }
+    [self.mapCtrl.view drawViewHierarchyInRect:self.mapCtrl.map.layer.bounds afterScreenUpdates:NO];
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
 
-      [instance.mapCtrl.executeQueue addOperationWithBlock:^{
-        NSData *imageData = UIImagePNGRepresentation(image);
-        NSString* base64Encoded = [imageData base64EncodedStringWithOptions:0];
-        NSString* base64EncodedWithData = [@"data:image/png;base64," stringByAppendingString:base64Encoded];
+    [self.mapCtrl.executeQueue addOperationWithBlock:^{
+      NSData *imageData = UIImagePNGRepresentation(image);
+      NSString* base64Encoded = [imageData base64EncodedStringWithOptions:0];
+      NSString* base64EncodedWithData = [@"data:image/png;base64," stringByAppendingString:base64Encoded];
 
-        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:base64EncodedWithData];
-        [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-      }];
+      CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:base64EncodedWithData];
+      [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
     }];
-    
   }];
-  
 }
 
 /**
  * Maps an Earth coordinate to a point coordinate in the map's view.
  */
 - (void)fromLatLngToPoint:(CDVInvokedUrlCommand*)command {
-  
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
 
-  NSDictionary *params = [command.arguments objectAtIndex:1];
-  
-  float latitude = [[params objectForKey:@"lat"] floatValue];
-  float longitude = [[params objectForKey:@"lng"] floatValue];
-  CGPoint point = [instance.mapCtrl.map.projection
-                   pointForCoordinate:CLLocationCoordinate2DMake(latitude, longitude)];
 
-  NSMutableArray *pointJSON = [[NSMutableArray alloc] init];
-  [pointJSON addObject:[NSNumber numberWithDouble:point.x]];
-  [pointJSON addObject:[NSNumber numberWithDouble:point.y]];
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+    float latitude = [[command.arguments objectAtIndex:0] floatValue];
+    float longitude = [[command.arguments objectAtIndex:1] floatValue];
+    CGPoint point = [self.mapCtrl.map.projection
+                     pointForCoordinate:CLLocationCoordinate2DMake(latitude, longitude)];
 
-  CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:pointJSON];
-  [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-  
+    [self.mapCtrl.executeQueue addOperationWithBlock:^{
+      NSMutableArray *pointJSON = [[NSMutableArray alloc] init];
+      [pointJSON addObject:[NSNumber numberWithDouble:point.x]];
+      [pointJSON addObject:[NSNumber numberWithDouble:point.y]];
+
+      CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:pointJSON];
+      [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    }];
+  }];
 }
 
 /**
  * Maps a point coordinate in the map's view to an Earth coordinate.
  */
 - (void)fromPointToLatLng:(CDVInvokedUrlCommand*)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  NSDictionary *params = [command.arguments objectAtIndex:1];
-  
-  float pointX = [[params objectForKey:@"x"] floatValue];
-  float pointY = [[params objectForKey:@"y"] floatValue];
-  
-  CLLocationCoordinate2D latLng = [instance.mapCtrl.map.projection
-                                   coordinateForPoint:CGPointMake(pointX, pointY)];
 
-  NSMutableArray *latLngJSON = [[NSMutableArray alloc] init];
-  [latLngJSON addObject:[NSNumber numberWithDouble:latLng.latitude]];
-  [latLngJSON addObject:[NSNumber numberWithDouble:latLng.longitude]];
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+    float pointX = [[command.arguments objectAtIndex:0] floatValue];
+    float pointY = [[command.arguments objectAtIndex:1] floatValue];
+    CLLocationCoordinate2D latLng = [self.mapCtrl.map.projection
+                                     coordinateForPoint:CGPointMake(pointX, pointY)];
 
-  CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:latLngJSON];
-  [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    [self.mapCtrl.executeQueue addOperationWithBlock:^{
+      NSMutableArray *latLngJSON = [[NSMutableArray alloc] init];
+      [latLngJSON addObject:[NSNumber numberWithDouble:latLng.latitude]];
+      [latLngJSON addObject:[NSNumber numberWithDouble:latLng.longitude]];
+
+      CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:latLngJSON];
+      [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    }];
+  }];
 }
 
 - (void)_setOptions:(NSDictionary *)initOptions requestMethod:(NSString *)requestMethod command:(CDVInvokedUrlCommand *)command {
 
   [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+    NSLog(@"options=%@", initOptions);
     BOOL isEnabled = NO;
     //controls
     NSDictionary *controls = [initOptions objectForKey:@"controls"];
@@ -834,7 +896,7 @@
                                   ^() {return kGMSTypeNone; }, @"MAP_TYPE_NONE",
                                   nil];
 
-        typedef GMSMapViewType (^CaseBlock)(void);
+        typedef GMSMapViewType (^CaseBlock)();
         GMSMapViewType mapType;
         CaseBlock caseBlock = mapTypes[typeStr];
         if (caseBlock) {
@@ -891,25 +953,17 @@
 
 
 - (void)setOptions:(CDVInvokedUrlCommand *)command {
-  
-  
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  [instance.mapCtrl.executeQueue addOperationWithBlock:^{
-    NSDictionary *initOptions = [command.arguments objectAtIndex:1];
+  [self.mapCtrl.executeQueue addOperationWithBlock:^{
+    NSDictionary *initOptions = [command.arguments objectAtIndex:0];
     [initOptions setValue:@"setOptions" forKeyPath:@"method"];
-    [instance _setOptions:initOptions requestMethod:@"setOptions" command:command];
+    [self _setOptions:initOptions requestMethod:@"setOptions" command:command];
   }];
 }
 
 
 - (void)setPadding:(CDVInvokedUrlCommand *)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  [instance.mapCtrl.executeQueue addOperationWithBlock:^{
-    NSDictionary *paddingJson = [command.arguments objectAtIndex:1];
+  [self.mapCtrl.executeQueue addOperationWithBlock:^{
+    NSDictionary *paddingJson = [command.arguments objectAtIndex:0];
     float top = [[paddingJson objectForKey:@"top"] floatValue];
     float left = [[paddingJson objectForKey:@"left"] floatValue];
     float right = [[paddingJson objectForKey:@"right"] floatValue];
@@ -918,61 +972,59 @@
     UIEdgeInsets padding = UIEdgeInsetsMake(top, left, bottom, right);
 
     [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-      [instance.mapCtrl.map setPadding:padding];
-    }];
+      [self.mapCtrl.map setPadding:padding];
 
-    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-    [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+      CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+      [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    }];
   }];
 }
 
 - (void)getFocusedBuilding:(CDVInvokedUrlCommand*)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
-  
-  
-  GMSIndoorBuilding *building = instance.mapCtrl.map.indoorDisplay.activeBuilding;
-  if (building != (id)[NSNull null] || [building.levels count] == 0) {
-    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-    [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-    return;
-  }
-  GMSIndoorLevel *activeLevel = instance.mapCtrl.map.indoorDisplay.activeLevel;
-
-  [instance.mapCtrl.executeQueue addOperationWithBlock:^{
-
-    NSMutableDictionary *result = [NSMutableDictionary dictionary];
-
-    NSUInteger activeLevelIndex = [building.levels indexOfObject:activeLevel];
-    [result setObject:[NSNumber numberWithInteger:activeLevelIndex] forKey:@"activeLevelIndex"];
-    [result setObject:[NSNumber numberWithInteger:building.defaultLevelIndex] forKey:@"defaultLevelIndex"];
-
-    GMSIndoorLevel *level;
-    NSMutableDictionary *levelInfo;
-    NSMutableArray *levels = [NSMutableArray array];
-    for (level in building.levels) {
-      levelInfo = [NSMutableDictionary dictionary];
-
-      [levelInfo setObject:[NSString stringWithString:level.name] forKey:@"name"];
-      [levelInfo setObject:[NSString stringWithString:level.shortName] forKey:@"shortName"];
-      [levels addObject:levelInfo];
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+    GMSIndoorBuilding *building = self.mapCtrl.map.indoorDisplay.activeBuilding;
+    if (building != (id)[NSNull null] || [building.levels count] == 0) {
+      CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+      [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+      return;
     }
-    [result setObject:levels forKey:@"levels"];
+    GMSIndoorLevel *activeLevel = self.mapCtrl.map.indoorDisplay.activeLevel;
+
+    [self.mapCtrl.executeQueue addOperationWithBlock:^{
+
+      NSMutableDictionary *result = [NSMutableDictionary dictionary];
+
+      NSUInteger activeLevelIndex = [building.levels indexOfObject:activeLevel];
+      [result setObject:[NSNumber numberWithInteger:activeLevelIndex] forKey:@"activeLevelIndex"];
+      [result setObject:[NSNumber numberWithInteger:building.defaultLevelIndex] forKey:@"defaultLevelIndex"];
+
+      GMSIndoorLevel *level;
+      NSMutableDictionary *levelInfo;
+      NSMutableArray *levels = [NSMutableArray array];
+      for (level in building.levels) {
+        levelInfo = [NSMutableDictionary dictionary];
+
+        [levelInfo setObject:[NSString stringWithString:level.name] forKey:@"name"];
+        [levelInfo setObject:[NSString stringWithString:level.shortName] forKey:@"shortName"];
+        [levels addObject:levelInfo];
+      }
+      [result setObject:levels forKey:@"levels"];
 
 
-    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:result];
-    [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+      CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:result];
+      [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    }];
   }];
 }
 
 
 - (void)stopAnimation:(CDVInvokedUrlCommand*)command {
-  NSString *mapId = [command.arguments objectAtIndex:0];
-  PluginMap *instance = [CordovaGoogleMaps getViewPlugin:mapId];
 
-  [instance.mapCtrl.map.layer removeAllAnimations];
-  CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-  [instance.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+  [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+    [self.mapCtrl.map.layer removeAllAnimations];
+      CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+      [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+  }];
 
 }
 @end

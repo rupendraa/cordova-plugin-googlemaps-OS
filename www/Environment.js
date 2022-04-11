@@ -6,7 +6,7 @@ var common = require('./Common');
 var Environment = {};
 
 Environment.setBackgroundColor = function (color) {
-  cordova.exec(null, null, 'CordovaGoogleMaps', 'setBackGroundColor', [common.HTMLColor2RGBA(color)]);
+  cordova.exec(null, null, 'PluginEnvironment', 'setBackGroundColor', [common.HTMLColor2RGBA(color)]);
 };
 
 Environment.isAvailable = function (callback) {
@@ -18,18 +18,18 @@ Environment.isAvailable = function (callback) {
     if (typeof callback === 'function') {
       callback(false, message);
     }
-  }, 'CordovaGoogleMaps', 'isAvailable', ['']);
+  }, 'PluginEnvironment', 'isAvailable', ['']);
 };
 
 Environment.getLicenseInfo = function (callback) {
   cordova.exec(function (txt) {
     callback(txt);
-  }, null, 'CordovaGoogleMaps', 'getLicenseInfo', []);
+  }, null, 'PluginEnvironment', 'getLicenseInfo', []);
 };
 
 Environment.setEnv = function (options) {
   if (options) {
-    cordova.exec(null, null, 'CordovaGoogleMaps', 'setEnv', [options]);
+    cordova.exec(null, null, 'PluginEnvironment', 'setEnv', [options]);
   }
 };
 
