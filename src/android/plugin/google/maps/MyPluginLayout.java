@@ -1,7 +1,6 @@
 package plugin.google.maps;
 
 import android.annotation.SuppressLint;
-import android.app.Activity;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Canvas;
@@ -15,10 +14,10 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
-import android.widget.AbsoluteLayout;
 import android.widget.FrameLayout;
-import android.widget.LinearLayout;
 import android.widget.ScrollView;
+
+import androidx.appcompat.app.AppCompatActivity;
 
 import org.apache.cordova.CordovaWebView;
 import org.json.JSONObject;
@@ -48,7 +47,7 @@ public class MyPluginLayout extends FrameLayout implements ViewTreeObserver.OnSc
   public Map<String, String> CACHE_FIND_DOM = new ConcurrentHashMap<String, String>();
   public Map<String, Bundle> HTMLNodes = new ConcurrentHashMap<String, Bundle>();
   public Map<String, RectF> HTMLNodeRectFs = new ConcurrentHashMap<String, RectF>();
-  private Activity mActivity = null;
+  private AppCompatActivity mActivity = null;
   private Paint debugPaint = new Paint();
   public boolean stopFlag = false;
   public boolean needUpdatePosition = false;
@@ -146,7 +145,7 @@ public class MyPluginLayout extends FrameLayout implements ViewTreeObserver.OnSc
   }
 
   @SuppressLint("NewApi")
-  public MyPluginLayout(CordovaWebView webView, Activity activity) {
+  public MyPluginLayout(CordovaWebView webView, AppCompatActivity activity) {
     super(webView.getView().getContext());
     this.browserView = webView.getView();
     browserView.getViewTreeObserver().addOnGlobalLayoutListener(this);

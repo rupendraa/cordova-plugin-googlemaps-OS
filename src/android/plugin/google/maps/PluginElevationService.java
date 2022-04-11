@@ -1,11 +1,11 @@
 package plugin.google.maps;
 
-import android.app.Activity;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.util.Log;
 
-import com.google.android.libraries.maps.model.LatLng;
+import androidx.appcompat.app.AppCompatActivity;
+
+import com.google.android.gms.maps.model.LatLng;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
@@ -20,7 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 
 public class PluginElevationService extends CordovaPlugin {
-  private Activity activity;
+  private AppCompatActivity activity;
   private final String TAG = "PluginElevationService";
   private String API_KEY = "";
 

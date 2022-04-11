@@ -1,7 +1,6 @@
 package plugin.google.maps;
 
 import android.annotation.TargetApi;
-import android.app.Activity;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.Config;
@@ -17,11 +16,13 @@ import android.os.Build.VERSION;
 import android.os.Bundle;
 import android.util.Base64;
 
-import com.google.android.libraries.maps.model.IndoorBuilding;
-import com.google.android.libraries.maps.model.IndoorLevel;
-import com.google.android.libraries.maps.model.LatLng;
-import com.google.android.libraries.maps.model.LatLngBounds;
-import com.google.android.libraries.maps.model.LatLngBounds.Builder;
+import androidx.appcompat.app.AppCompatActivity;
+
+import com.google.android.gms.maps.model.IndoorBuilding;
+import com.google.android.gms.maps.model.IndoorLevel;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
+import com.google.android.gms.maps.model.LatLngBounds.Builder;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaResourceApi;
@@ -46,7 +47,7 @@ import java.util.zip.ZipInputStream;
 public class PluginUtil {
   // Get resource id
   // http://stackoverflow.com/a/37840674
-  public static int getAppResource(Activity activity, String name, String type) {
+  public static int getAppResource(AppCompatActivity activity, String name, String type) {
     return activity.getResources().getIdentifier(name, type, activity.getPackageName());
   }
 
@@ -427,7 +428,7 @@ public class PluginUtil {
     return files;
   }
 
-  public static String getPgmStrings(Activity activity, String key) {
+  public static String getPgmStrings(AppCompatActivity activity, String key) {
     int resId = PluginUtil.getAppResource(activity, key, "string");
     Resources res = activity.getResources();
     return res.getString(resId);

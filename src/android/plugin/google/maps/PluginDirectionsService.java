@@ -1,11 +1,9 @@
 package plugin.google.maps;
 
-import android.app.Activity;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.util.Log;
 
-import com.google.android.libraries.maps.model.LatLng;
+import androidx.appcompat.app.AppCompatActivity;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
@@ -17,11 +15,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 
 public class PluginDirectionsService extends CordovaPlugin {
-  private Activity activity;
+  private AppCompatActivity activity;
   private final String TAG = "PluginDirectionsService";
   private String API_KEY = "";
 
