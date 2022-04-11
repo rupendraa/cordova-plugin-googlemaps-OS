@@ -1,7 +1,7 @@
 def getConvertListe(useAndroidX) {
   def list = [
-          ["com.google.android.gms.maps.model", "com.google.android.libraries.maps.model"],
-          ["com.google.android.gms.maps", "com.google.android.libraries.maps"]
+          ["com.google.android.libraries.maps.model", "com.google.android.gms.maps.model"],
+          ["com.google.android.libraries.maps", "com.google.android.gms.maps"]
   ]
 
   if (!useAndroidX) {
@@ -256,9 +256,9 @@ android {
   //-----------------------------------------------
   // Replace the source code of this plugin
   //-----------------------------------------------
-  //def cvtList = getConvertListe(useAndroidX)
+  def cvtList = getConvertListe(useAndroidX)
 
-  //replaceFiles("**/plugin/google/maps/*.java", cvtList, useAndroidX)
+  replaceFiles("**/plugin/google/maps/*.java", cvtList, useAndroidX)
 
   //-------------------------------------------
   // Set the API key into AndroidManifest.xml
