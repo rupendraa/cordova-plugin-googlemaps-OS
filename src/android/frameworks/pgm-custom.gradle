@@ -223,8 +223,9 @@ android {
   def useAndroidX = hasUseAndroidX && hasEnableJetifier &&
           'true' == project.ext.get('android.useAndroidX') &&
           'true' == project.ext.get('android.enableJetifier')
-  useAndroidX = false
+  //useAndroidX = false
   if (useAndroidX) {
+  /*
     dependencies {
       implementation 'com.google.android.libraries.maps:maps:3.1.0-beta'
       implementation 'com.android.volley:volley:1.2.0'
@@ -234,6 +235,12 @@ android {
     defaultConfig {
       multiDexEnabled true
     }
+    */
+    
+    dependencies {
+      implementation 'com.google.android.gms:play-services-maps:18.0.2'
+    }
+
   } else {
     def PLAY_SERVICES_LOCATION_VERSION = env.getConfigOrDefault("GOOGLE_MAPS_PLAY_SERVICES_LOCATION_VERSION", "16.0.0")
     def PLAY_SERVICES_VERSION = env.getConfigOrDefault("GOOGLE_MAPS_PLAY_SERVICES_VERSION", "16.1.0")
