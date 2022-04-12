@@ -463,7 +463,7 @@
     <resource-file src="src/ios/strings/pgm_Localizable_vi.json" target="pgm_Localizable_vi.json"/>
 
     <config-file target="*-Info.plist" parent="NSLocationWhenInUseUsageDescription">
-      <string>My app requires access to your location when the screen is on and the app is displayed.</string>
+      <string>$LOCATION_WHEN_IN_USE_DESCRIPTION</string>
     </config-file>
 
     <config-file target="*-Info.plist" parent="NSLocationAlwaysUsageDescription">
