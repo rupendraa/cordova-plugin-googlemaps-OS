@@ -1,22 +1,22 @@
 repositories {
-  maven { url 'https://maven.google.com' }
-  mavenCentral()
-  jcenter()
-  def libsDirPath = System.getProperty("user.dir")
-  flatDir{
-    dirs 'src/main/libs', 'libs', "${libsDirPath}/libs"
-  }
+    google() // Adiciona o repositório do Google
+    mavenCentral()
+    def libsDirPath = System.getProperty("user.dir")
+    flatDir{
+        dirs 'src/main/libs', 'libs', "${libsDirPath}/libs"
+    }
 }
 
 dependencies {
-  implementation(name:'tbxml-android', ext:'aar')
+    implementation(name:'tbxml-android', ext:'aar')
+    implementation 'com.google.android.libraries.places:places:3.2.0' // Adiciona a dependência do Places SDK
 }
 
 android {
-  compileSdkVersion 28
+    compileSdkVersion 28
 
-  packagingOptions {
-    exclude 'README'
-    exclude 'LICENSE'
-  }
+    packagingOptions {
+        exclude 'README'
+        exclude 'LICENSE'
+    }
 }

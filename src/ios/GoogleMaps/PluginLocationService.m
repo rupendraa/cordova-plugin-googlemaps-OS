@@ -7,8 +7,11 @@
 //
 
 #import "PluginLocationService.h"
-
+#import <GooglePlaces/GooglePlaces.h>
+  
 @implementation PluginLocationService
+
+@synthesize latestCallbackId;
 
 - (void)pluginInitialize
 {
@@ -229,5 +232,56 @@
     [self.locationCommandQueue removeAllObjects];
 
 }
+
+- (id) getCommandArg:(id) argument {
+    return argument == (id)[NSNull null] ? nil : argument;
+}
+
+- (void)getSuggestionsFromLocations:(CDVInvokedUrlCommand *)command {
+ 
+    [self.commandDelegate runInBackground:^{
+        id textLocation = [self getCommandArg:command.arguments[0]];
+        id country = [self getCommandArg:command.arguments[1]];
+
+        if ([textLocation isKindOfClass:[NSString class]] && [country isKindOfClass:[NSString class]]) {
+             
+            GMSAutocompleteSessionToken *token = [[GMSAutocompleteSessionToken alloc] init];
+ 
+            GMSAutocompleteFilter *filter = [[GMSAutocompleteFilter alloc] init];
+            filter.type = kGMSPlacesAutocompleteTypeFilterNoFilter; 
+            filter.countries = @[country];
+  
+            GMSPlacesClient *placesClient = [GMSPlacesClient sharedClient];
+  
+            [placesClient findAutocompletePredictionsFromQuery:textLocation filter:filter sessionToken:token callback:^(NSArray * _Nullable results, NSError * _Nullable error) {
+                if (error != nil) {
+                     
+                    NSLog(@"##### getSuggestionsFromLocations on Plugin iOS - ERROR #####");
+                    [self.commandDelegate runInBackground:^{
+                        [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:[error localizedDescription]] callbackId:command.callbackId];
+                    }];
+                } else {
+
+                     NSLog(@"##### getSuggestionsFromLocations on Plugin iOS - SUCCESS #####");
+
+                    NSMutableArray *suggestions = [NSMutableArray array];
+                    for (GMSAutocompletePrediction *prediction in results) {
+                        [suggestions addObject:prediction.attributedFullText.string];
+                    }
+                    
+                    [self.commandDelegate runInBackground:^{
+                        [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:suggestions] callbackId:command.callbackId];
+                    }];
+                }
+            }];
+             
+        } else {
+            CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Parâmetros inválidos"];
+            [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+        }
+    }];
+}
+
+ 
 
 @end

@@ -20,7 +20,6 @@
 #import "IPluginProtocol.h"
 #import "PluginViewController.h"
 #import <Cordova/CDVCommandDelegate.h>
-#import <Cordova/CDVCommandDelegateImpl.h>
 
 typedef void (^MYCompletionHandler)(NSError *error);
 
@@ -50,7 +49,7 @@ typedef void (^MYCompletionHandler)(NSError *error);
 - (UIImage *)resize:(CGFloat)width height:(CGFloat)height;
 @end
 
-@interface CDVCommandDelegateImpl (GoogleMapsPlugin)
+@interface CDVAppDelegate (GoogleMapsPlugin)
 - (void)hookSendPluginResult:(CDVPluginResult*)result callbackId:(NSString*)callbackId;
 @end
 

@@ -7,6 +7,7 @@
 //
 
 #import "PluginMapViewController.h"
+#import <GooglePlaces/GooglePlaces.h>
 
 @implementation PluginMapViewController
 
@@ -1062,5 +1063,38 @@
 
   [self execJS:jsString];
 }
+
+/*
+- (void)getSuggestionsFromLocations:(NSString *)textLocation country:(NSString *)country callbackContext:(CDVInvokedUrlCommand *)command {
+
+    GMSAutocompleteSessionToken *token = [[GMSAutocompleteSessionToken alloc] init];
+    
+    GMSAutocompleteFilter *filter = [[GMSAutocompleteFilter alloc] init];
+    filter.type = kGMSPlacesAutocompleteTypeFilterNoFilter; 
+    filter.countries = @[country];
+    
+    GMSPlacesClient *placesClient = [GMSPlacesClient sharedClient];
+    
+    [placesClient findAutocompletePredictionsFromQuery:textLocation filter:filter sessionToken:token callback:^(NSArray * _Nullable results, NSError * _Nullable error) {
+        if (error != nil) {
+            // Ocorreu um erro ao obter as sugestões
+            [self.commandDelegate runInBackground:^{
+                [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:[error localizedDescription]] callbackId:command.callbackId];
+            }];
+        } else {
+            NSMutableArray *suggestions = [NSMutableArray array];
+            for (GMSAutocompletePrediction *prediction in results) {
+                [suggestions addObject:prediction.attributedFullText.string];
+            }
+            
+            [self.commandDelegate runInBackground:^{
+                [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:suggestions] callbackId:command.callbackId];
+            }];
+        }
+    }];
+}
+
+*/
+
 
 @end

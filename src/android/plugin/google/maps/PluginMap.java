@@ -23,6 +23,7 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -44,6 +45,7 @@ import com.google.android.gms.maps.GoogleMapOptions;
 import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.Projection;
+import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.UiSettings;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.CameraPosition.Builder;
@@ -116,6 +118,9 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
   private final String ANIMATE_CAMERA_CANCELED = "animate_camera_canceled";
 
   private Handler mainHandler;
+   
+  //Create field for map button.
+  private View locationButton;
 
   private class AsyncUpdateCameraPositionResult {
     CameraUpdate cameraUpdate;
@@ -154,6 +159,8 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
 
   @Override
   public void initialize(CordovaInterface cordova, final CordovaWebView webView) {
+
+    Log.d("CAMERA_MOVE", "INITIALIZE");
     super.initialize(cordova, webView);
     activity = cordova.getActivity();
     mainHandler = new Handler(Looper.getMainLooper());
@@ -162,11 +169,13 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
   @TargetApi(Build.VERSION_CODES.HONEYCOMB)
   public void getMap(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
 
+    Log.d("CAMERA_MOVE", "GETMAP");
     GoogleMapOptions options = new GoogleMapOptions();
     JSONObject meta = args.getJSONObject(0);
     mapId = meta.getString("__pgmId");
     viewDepth = meta.getInt("depth");
     final JSONObject params = args.getJSONObject(1);
+    boolean hasZoom = false;
 
     //controls
     if (params.has("controls")) {
@@ -177,13 +186,14 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
       }
       if (controls.has("zoom")) {
         options.zoomControlsEnabled(controls.getBoolean("zoom"));
+        hasZoom = controls.getBoolean("zoom");
       }
       if (controls.has("mapToolbar")) {
         options.mapToolbarEnabled(controls.getBoolean("mapToolbar"));
       }
 
 
-      if (controls.has("myLocationButton") || controls.has("myLocation")) {
+      if (controls.has("myLocationButton")) {
 
         // Request geolocation permission.
         boolean locationPermission = PermissionChecker.checkSelfPermission(cordova.getActivity(), Manifest.permission.ACCESS_COARSE_LOCATION) == PermissionChecker.PERMISSION_GRANTED;
@@ -203,9 +213,6 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
             }
           }
           locationPermission = PermissionChecker.checkSelfPermission(cordova.getActivity(), Manifest.permission.ACCESS_FINE_LOCATION) == PermissionChecker.PERMISSION_GRANTED;
-
-          //Log.d(TAG, "---> (252)setMyLocationEnabled, hasPermission =  " + locationPermission);
-
         }
       }
     }
@@ -276,6 +283,7 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
 
     mapView = new MapView(activity, options);
 
+    boolean finalHasZoom = hasZoom;
     activity.runOnUiThread(new Runnable() {
       @Override
       public void run() {
@@ -286,17 +294,15 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
           @Override
           public void onMapReady(GoogleMap googleMap) {
 
+            Log.d("CAMERA_MOVE", "MAP ASYNC");
             dummyMyLocationButton = new ImageView(activity);
+            int myLocationBottom = finalHasZoom ? 100 : 6;
             FrameLayout.LayoutParams lParams = new FrameLayout.LayoutParams((int)(48 * density), (int)(48 * density));
-            lParams.gravity = Gravity.RIGHT;
+            lParams.gravity = Gravity.BOTTOM + Gravity.END;
+            lParams.bottomMargin = (int)(myLocationBottom * density);
             lParams.rightMargin = (int)(6 * density);
-            lParams.topMargin = (int)(6 * density);
-            lParams.leftMargin = 0;
             dummyMyLocationButton.setClickable(true);
-            dummyMyLocationButton.setAlpha(0.75f);
             dummyMyLocationButton.setVisibility(View.GONE);
-            dummyMyLocationButton.setLayoutParams(lParams);
-
             int buttonImgId = PluginUtil.getAppResource(cordova.getActivity(), "dummy_my_location_button", "drawable");
             dummyMyLocationButton.setImageBitmap(BitmapFactory.decodeResource(activity.getResources(), buttonImgId));
 
@@ -306,10 +312,19 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
             dummyMyLocationButton.setOnClickListener(new View.OnClickListener() {
               @Override
               public void onClick(View v) {
+                Log.d("CAMERA_MOVE", "clique no my custom location");
+                if(map != null)
+                {
+                  locationButton = mapView.findViewById(0x2);
+                  if(locationButton != null)
+                    locationButton.callOnClick();
+
+                }
                 PluginMap.this.onMyLocationButtonClick();
               }
             });
-            mapView.addView(dummyMyLocationButton);
+            mapView.addView(dummyMyLocationButton, lParams);
+            locationButton = mapView.findViewById(0x2);
 
             map = googleMap;
             projection = map.getProjection();
@@ -332,24 +347,22 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
                   map.setIndoorEnabled(isEnabled);
                 }
 
-                if (controls.has("myLocationButton") || controls.has("myLocation")) {
+                if (controls.has("myLocationButton")) {
                   boolean locationPermission = PermissionChecker.checkSelfPermission(cordova.getActivity(), Manifest.permission.ACCESS_COARSE_LOCATION) == PermissionChecker.PERMISSION_GRANTED;
                   //Log.d(TAG, "---> (314) hasPermission =  " + locationPermission);
 
                   if (locationPermission) {
-                    Boolean isMyLocationEnabled = false;
-                    if (controls.has("myLocation")) {
-                      isMyLocationEnabled = controls.getBoolean("myLocation");
-                      map.setMyLocationEnabled(isMyLocationEnabled);
-                    }
 
-                    Boolean isMyLocationButtonEnabled = false;
+                    boolean isMyLocationButtonEnabled = false;
                     if (controls.has("myLocationButton")) {
                       isMyLocationButtonEnabled = controls.getBoolean("myLocationButton");
                       map.getUiSettings().setMyLocationButtonEnabled(isMyLocationButtonEnabled);
+                      map.setMyLocationEnabled(isMyLocationButtonEnabled);
+                      if(locationButton != null)
+                        locationButton.setVisibility(View.GONE);
                     }
-                    //Log.d(TAG, "--->isMyLocationButtonEnabled = " + isMyLocationButtonEnabled + ", isMyLocationEnabled = " + isMyLocationEnabled);
-                    if (!isMyLocationEnabled && isMyLocationButtonEnabled) {
+
+                    if (isMyLocationButtonEnabled) {
                       dummyMyLocationButton.setVisibility(View.VISIBLE);
                     } else {
                       dummyMyLocationButton.setVisibility(View.GONE);
@@ -378,6 +391,7 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
                   }
                   map.setPadding(left, top, right, bottom);
 
+                  Log.d("CAMERA_MOVE", "getMap has preference set layout 2");
                   FrameLayout.LayoutParams lParams2 = (FrameLayout.LayoutParams) dummyMyLocationButton.getLayoutParams();
                   lParams2.rightMargin = right + (int)(5 * density);
                   lParams2.topMargin = top + (int)(5 * density);
@@ -1306,7 +1320,7 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
                   right = (int) (padding.getInt("right") * density);
                 }
                 map.setPadding(left, top, right, bottom);
-
+                Log.d("CAMERA_MOVE", "outro padding ");
                 FrameLayout.LayoutParams lParams2 = (FrameLayout.LayoutParams) dummyMyLocationButton.getLayoutParams();
                 lParams2.rightMargin = right + (int)(5 * density);
                 lParams2.topMargin = top + (int)(5 * density);
@@ -1375,7 +1389,7 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
               if (controls.has("mapToolbar")) {
                 settings.setMapToolbarEnabled(controls.getBoolean("mapToolbar"));
               }
-              if (controls.has("myLocation") || controls.has("myLocationButton")) {
+              if (controls.has("myLocationButton")) {
                 cordova.getThreadPool().submit(new Runnable() {
                   @Override
                   public void run() {
@@ -1822,7 +1836,7 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
    * @param callbackContext
    * @throws JSONException
    */
-  public void setMyLocationEnabled(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
+   public void setMyLocationEnabled(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
 
     final JSONObject params = args.getJSONObject(0);
 
@@ -1834,7 +1848,7 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
       //_saveCallbackContext = callbackContext;
       synchronized (semaphore) {
         cordova.requestPermissions(this, callbackContext.hashCode(), new String[]{
-                Manifest.permission.ACCESS_FINE_LOCATION
+            Manifest.permission.ACCESS_FINE_LOCATION
         });
         try {
           semaphore.wait();
@@ -2208,9 +2222,10 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
       public void run() {
         map.setPadding(left, top, right, bottom);
 
+        Log.d("CAMERA_MOVE", "setPadding");
         FrameLayout.LayoutParams lParams2 = (FrameLayout.LayoutParams) dummyMyLocationButton.getLayoutParams();
         lParams2.rightMargin = right + (int)(5 * density);
-        lParams2.topMargin = top + (int)(5 * density);
+        lParams2.topMargin = top + (int)(400 * density);
         dummyMyLocationButton.setLayoutParams(lParams2);
 
         callbackContext.success();
@@ -2700,6 +2715,7 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
    */
   private boolean isPolygonContains(List<LatLng> path, LatLng point) {
     int wn = 0;
+
     VisibleRegion visibleRegion = projection.getVisibleRegion();
     LatLngBounds bounds = visibleRegion.latLngBounds;
     Point sw = projection.toScreenLocation(bounds.southwest);
@@ -2803,38 +2819,46 @@ public class PluginMap extends MyPlugin implements OnMarkerClickListener,
           target.put("lng", position.target.longitude);
           params.put("target", target);
 
-          VisibleRegion visibleRegion = projection.getVisibleRegion();
-          LatLngBounds latLngBounds = visibleRegion.latLngBounds;
+          VisibleRegion visibleRegion;
 
-          JSONObject northeast = new JSONObject();
-          northeast.put("lat", latLngBounds.northeast.latitude);
-          northeast.put("lng", latLngBounds.northeast.longitude);
-          params.put("northeast", northeast);
+          if(mapView != null && mapView.getWidth() > 0){
+            visibleRegion = projection.getVisibleRegion();
 
-          JSONObject southwest = new JSONObject();
-          southwest.put("lat", latLngBounds.southwest.latitude);
-          southwest.put("lng", latLngBounds.southwest.longitude);
-          params.put("southwest", southwest);
+            LatLngBounds latLngBounds = visibleRegion.latLngBounds;
 
-          JSONObject nearLeft = new JSONObject();
-          nearLeft.put("lat", visibleRegion.nearLeft.latitude);
-          nearLeft.put("lng", visibleRegion.nearLeft.longitude);
-          params.put("nearLeft", nearLeft);
+            JSONObject northeast = new JSONObject();
+            northeast.put("lat", latLngBounds.northeast.latitude);
+            northeast.put("lng", latLngBounds.northeast.longitude);
+            params.put("northeast", northeast);
 
-          JSONObject nearRight = new JSONObject();
-          nearRight.put("lat", visibleRegion.nearRight.latitude);
-          nearRight.put("lng", visibleRegion.nearRight.longitude);
-          params.put("nearRight", nearRight);
+            JSONObject southwest = new JSONObject();
+            southwest.put("lat", latLngBounds.southwest.latitude);
+            southwest.put("lng", latLngBounds.southwest.longitude);
+            params.put("southwest", southwest);
 
-          JSONObject farLeft = new JSONObject();
-          farLeft.put("lat", visibleRegion.farLeft.latitude);
-          farLeft.put("lng", visibleRegion.farLeft.longitude);
-          params.put("farLeft", farLeft);
+            JSONObject nearLeft = new JSONObject();
+            nearLeft.put("lat", visibleRegion.nearLeft.latitude);
+            nearLeft.put("lng", visibleRegion.nearLeft.longitude);
+            params.put("nearLeft", nearLeft);
 
-          JSONObject farRight = new JSONObject();
-          farRight.put("lat", visibleRegion.farRight.latitude);
-          farRight.put("lng", visibleRegion.farRight.longitude);
-          params.put("farRight", farRight);
+            JSONObject nearRight = new JSONObject();
+            nearRight.put("lat", visibleRegion.nearRight.latitude);
+            nearRight.put("lng", visibleRegion.nearRight.longitude);
+            params.put("nearRight", nearRight);
+
+            JSONObject farLeft = new JSONObject();
+            farLeft.put("lat", visibleRegion.farLeft.latitude);
+            farLeft.put("lng", visibleRegion.farLeft.longitude);
+            params.put("farLeft", farLeft);
+
+            JSONObject farRight = new JSONObject();
+            farRight.put("lat", visibleRegion.farRight.latitude);
+            farRight.put("lng", visibleRegion.farRight.longitude);
+            params.put("farRight", farRight);
+
+          }else{
+            visibleRegion = null;
+          }
 
           jsonStr = params.toString();
         } catch (JSONException e) {

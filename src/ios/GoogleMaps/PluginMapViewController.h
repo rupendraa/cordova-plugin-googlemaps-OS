@@ -14,6 +14,7 @@
 #import "PluginObjects.h"
 #import "PluginViewController.h"
 #import <GoogleMaps/GoogleMaps.h>
+//#import <GooglePlaces/GooglePlaces.h>
 
 @interface PluginMapViewController : PluginViewController<GMSMapViewDelegate, GMSIndoorDisplayDelegate>
 
@@ -23,4 +24,5 @@
 - (BOOL)didTapMyLocationButtonForMapView:(GMSMapView *)mapView;
 - (void)didChangeActiveBuilding: (GMSIndoorBuilding *)building;
 - (void)didChangeActiveLevel: (GMSIndoorLevel *)level;
+//- (void)getSuggestionsFromLocations:(NSString *)textLocation country:(NSString *)country callbackContext:(CDVInvokedUrlCommand *)command;
 @end

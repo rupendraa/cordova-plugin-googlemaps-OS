@@ -72,7 +72,46 @@ var LocationService = function(exec) {
       } else {
         return new Promise(resolver);
       }
+    },
+
+      // Adicione a função para obter sugestões de locais
+getSuggestionsFromLocations : function(textLocation, country, success_callback, errorCallback) {
+  var self = this;
+  var args = [textLocation, country, success_callback || null, errorCallback];
+  if (typeof args[0] === 'function') {
+      args.unshift('');
+  }
+  texto = textLocation;
+  country = country;
+   
+  success_callback = args[2];
+  errorCallback = args[3];
+
+  var resolver = function(resolve, reject) {
+    exec.call({
+      _isReady: true
+    },
+    function(sugestoes) {
+      resolve.call(self, sugestoes);
+    },
+    reject.bind(self), 'PluginLocationService', 'getSuggestionsFromLocations', [textLocation, country], {sync: true});
+  };
+
+  var errorHandler = function(result) {
+    if (typeof errorCallback === 'function') {
+        errorCallback.call(self, result);
     }
+  };
+
+  if (typeof success_callback === 'function') {
+    resolver(success_callback, errorHandler);
+    return self;
+  } else {
+    return new Promise(resolver);
+  }
+}
+
+    
   };
 };
 

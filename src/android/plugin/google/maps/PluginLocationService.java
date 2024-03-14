@@ -10,6 +10,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Looper;
 import android.util.Log;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -23,6 +25,16 @@ import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
+
+import com.google.android.libraries.places.api.model.AutocompletePrediction;
+import com.google.android.libraries.places.api.model.AutocompleteSessionToken;
+import com.google.android.libraries.places.api.model.RectangularBounds;
+import com.google.android.libraries.places.api.model.TypeFilter;
+import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest;
+import com.google.android.libraries.places.api.net.FindAutocompletePredictionsResponse;
+import com.google.android.libraries.places.api.net.PlacesClient;
+import com.google.android.libraries.places.api.Places;
+
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
@@ -40,6 +52,7 @@ import java.util.Iterator;
 import java.util.List;
 
 public class PluginLocationService extends CordovaPlugin {
+  
   private AppCompatActivity activity;
   private final String TAG = "PluginLocationService";
   private HashMap<String, Bundle> bufferForLocationDialog = new HashMap<String, Bundle>();
@@ -52,7 +65,24 @@ public class PluginLocationService extends CordovaPlugin {
   public void initialize(final CordovaInterface cordova, final CordovaWebView webView) {
     super.initialize(cordova, webView);
     activity = cordova.getActivity();
+
+    Context appContext = cordova.getActivity().getApplicationContext();
+ 
+    try {
+
+      ApplicationInfo appliInfo = appContext.getPackageManager().getApplicationInfo(appContext.getPackageName(), PackageManager.GET_META_DATA);
+      String apiKey = appliInfo.metaData.getString("com.google.android.geo.API_KEY");
+      
+      Places.initialize(appContext, apiKey);
+ 
+    } catch (Exception e) {
+
+      System.out.println("Erro ao inicializar o Places: " + e.getMessage());
+      
+    }
+ 
   }
+  
   private static Location lastLocation = null;
   private ArrayList<CallbackContext> regularAccuracyRequestList = new ArrayList<CallbackContext>();
   private ArrayList<CallbackContext> highAccuracyRequestList = new ArrayList<CallbackContext>();
@@ -73,6 +103,20 @@ public class PluginLocationService extends CordovaPlugin {
         try {
           if ("getMyLocation".equals(action)) {
             PluginLocationService.this.getMyLocation(args, callbackContext);
+          }else if ("getSuggestionsFromLocations".equals(action)) {
+
+            System.out.println("##### Args Lenght: "+args.length()+" ####");
+            
+            String textLocation = args.getString(0);
+            String country = args.getString(1);
+
+            System.out.println("##### Country: "+country+" ####");
+             
+            PluginLocationService.this.getSuggestionsFromLocations(textLocation, country, callbackContext);
+
+            
+
+            
           } else if ("hasPermission".equals(action)) {
             PluginLocationService.this.hasPermission(args, callbackContext);
           }
@@ -85,9 +129,7 @@ public class PluginLocationService extends CordovaPlugin {
     return true;
 
   }
-
-
-
+ 
   @SuppressWarnings("unused")
   public void hasPermission(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
     synchronized (semaphore) {
@@ -97,8 +139,55 @@ public class PluginLocationService extends CordovaPlugin {
     }
   }
 
+    private void getSuggestionsFromLocations(String textLocation, String country, CallbackContext callbackContext) {
+    
+    // Configurar a sessão de Autocomplete
+    AutocompleteSessionToken token = AutocompleteSessionToken.newInstance();
 
-      @SuppressWarnings("unused")
+    // Configurar os limites de busca
+    RectangularBounds bounds = RectangularBounds.newInstance(
+      new com.google.android.gms.maps.model.LatLng(-33.880490, 151.184363),
+      new com.google.android.gms.maps.model.LatLng(-33.858754, 151.229596));
+
+       System.out.println("##### Country getSuggestionsFromLocations: "+country+" ####");
+
+    // Configurar a requisição de Autocomplete
+    FindAutocompletePredictionsRequest request = FindAutocompletePredictionsRequest.builder()
+    .setLocationBias(bounds)
+    .setSessionToken(token)
+    .setCountries(country)
+    .setQuery(textLocation)
+    .build();
+
+    try {
+     // Inicializar o PlacesClient
+
+      PlacesClient placesClient = com.google.android.libraries.places.api.Places.createClient(this.cordova.getActivity());
+     
+      // Fazer a requisição de Autocomplete
+      placesClient.findAutocompletePredictions(request).addOnSuccessListener((response) -> {
+
+        JSONArray suggestions = new JSONArray();
+
+        for (AutocompletePrediction prediction : response.getAutocompletePredictions()) {
+           suggestions.put(prediction.getFullText(null).toString());
+        }
+
+       callbackContext.success(suggestions);
+     })
+      .addOnFailureListener((exception) -> {
+        callbackContext.error("Erro ao obter sugestões de locais: " + exception.getMessage());
+      });
+
+
+    } catch (Exception e) {
+      System.out.println("Erro ao criar o PlacesClient: " + e.getMessage());
+    }
+ 
+  }
+
+
+  @SuppressWarnings("unused")
   public void getMyLocation(final JSONArray args, final CallbackContext callbackContext) throws JSONException {
     synchronized (semaphore) {
 
