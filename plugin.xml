@@ -132,8 +132,6 @@
   <engines>
     <engine name="cordova" version=">=10.0.0" />
     <engine name="cordova-ios" version=">=7.0.0" />
-    <engine name="apple-xcode" version=">=11.0.0" />
-    <engine name="apple-ios" version=">=11.0.0" />
   </engines>
 
   <!-- android -->
